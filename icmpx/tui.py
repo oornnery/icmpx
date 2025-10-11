@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from textual import on
+from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll, Vertical
 from textual.reactive import reactive
 from textual.widgets import (
     Button,
@@ -14,9 +14,8 @@ from textual.widgets import (
     DataTable,
     Input,
     Label,
-    ListItem,
-    ListView,
     Static,
+    Footer
 )
 from textual.worker import Worker
 
@@ -34,16 +33,6 @@ except ImportError:  # pragma: no cover - fallback when run directly
     from icmpx._mtr import MtrResult
     from icmpx._multiping import MultiPingResult
     from icmpx._traceroute import TracerouteResult
-
-
-class ToolNav(ListView):
-    """Navigation list showing available tools."""
-
-    def compose(self) -> ComposeResult:
-        yield ListItem(Label("Ping", id="label-ping"), id="ping")
-        yield ListItem(Label("MultiPing", id="label-multiping"), id="multiping")
-        yield ListItem(Label("Traceroute", id="label-traceroute"), id="traceroute")
-        yield ListItem(Label("MTR", id="label-mtr"), id="mtr")
 
 
 def _reset_table(table: DataTable, columns: tuple[str, ...]) -> None:
@@ -100,52 +89,93 @@ class BaseToolView(VerticalScroll):
         """Populate the UI with a finished result."""
 
 
-class PingView(BaseToolView):
+class PingView(Vertical):
     """Simple ping form and result table."""
 
     title = "Ping"
-
+    results = reactive(tuple())
+    
     def compose(self) -> ComposeResult:
-        yield Label("Target host or IP")
-        yield Input(placeholder="8.8.8.8", id="ping-target", value="8.8.8.8")
-        yield Label("TTL (optional)")
-        yield Input(placeholder="64", id="ping-ttl")
-        yield Label("Timeout (seconds, optional)")
-        yield Input(placeholder="1.0", id="ping-timeout")
-        yield Button("Run Ping", id="ping-run")
+        with Vertical(id='ping-form'):
+            yield Label(" Target")
+            yield Input(placeholder="8.8.8.8", id="ping-target", value="8.8.8.8")
+            with Horizontal(id='ping-options'):
+                with Vertical():
+                    yield Label("TTL")
+                    yield Input(placeholder="64", id="ping-ttl", compact=True)
+                with Vertical():
+                    yield Label("Timeout")
+                    yield Input(placeholder="1.0", id="ping-timeout", compact=True)
+                with Vertical():
+                    yield Label("Count")
+                    yield Input(placeholder="10", id="ping-count", compact=True)
+            yield Button("Run Ping", id="ping-submit", flat=True)
         table = DataTable(id="ping-table")
-        table.add_columns("Field", "Value")
+        table.add_columns("Target", "Reply IP", "Sequence", "RTT (ms)", "Status")
         yield table
 
-    @on(Button.Pressed, "#ping-run")
+    @on(Button.Pressed, "#ping-submit")
     def run_ping(self) -> None:  # noqa: D401
-        target = self.query_one("#ping-target", Input).value or "8.8.8.8"
-        ttl_value = self.query_one("#ping-ttl", Input).value
-        timeout_value = self.query_one("#ping-timeout", Input).value
-
-        def _task() -> object:
-            ttl_opt = int(ttl_value) if ttl_value else None
-            timeout_opt = float(timeout_value) if timeout_value else None
-            with Icmp() as icmp:
-                return icmp.ping(target, ttl=ttl_opt, timeout=timeout_opt)
-
-        self._start_worker(_task)
-
-    def update_result(self, result: object) -> None:  # noqa: D401
-        table = self.query_one("#ping-table", DataTable)
-        _reset_table(table, ("Field", "Value"))
-        if not result:
+        target = self.query_one("#ping-target", Input).value
+        ttl = self.query_one("#ping-ttl", Input).value or "64"
+        timeout = self.query_one("#ping-timeout", Input).value or "1.0"
+        count = self.query_one("#ping-count", Input).value or "10"
+        if not target:
+            self.notify("Please enter a target address.")
             return
-        table.add_row("Target", getattr(result.sent_packet, "destination", "-"))
-        if result.response:
-            table.add_row("Reply IP", result.response.addr)
-            table.add_row("Sequence", str(result.response.sequence))
-            table.add_row("RTT (ms)", f"{result.response.rtt:.2f}")
-        elif result.error:
-            table.add_row("Error", result.error)
-        else:
-            table.add_row("Status", "Timeout")
+        # reset accumulated results so the table starts fresh for each run
+        self.results = tuple()
+        self.perform_ping(
+            target,
+            count=int(count),
+            ttl=int(ttl),
+            timeout=float(timeout),
+        )
 
+    @work(thread=True)
+    def perform_ping(self, target: str, count: int = 10, ttl: int = 64, timeout: float = 1.0) -> None:
+        """Perform a series of pings to measure performance."""
+        with Icmp() as icmp:
+            for _ in range(count):
+                result = icmp.ping(target, ttl=ttl, timeout=timeout)
+                self.results = (*self.results, result)
+
+    def watch_results(self, old_results: tuple, new_results: tuple) -> None:  # noqa: D401
+        table = self.query_one("#ping-table", DataTable)
+        if not new_results:
+            _reset_table(
+                table,
+                ("Target", "Reply IP", "Sequence", "RTT (ms)", "Status"),
+            )
+            return
+
+        if not old_results:
+            _reset_table(
+                table,
+                ("Target", "Reply IP", "Sequence", "RTT (ms)", "Status"),
+            )
+
+        start = len(old_results)
+        if start >= len(new_results):
+            return
+
+        for result in new_results[start:]:
+            target = getattr(result.sent_packet, "destination", "-")
+            if result.response:
+                table.add_row(
+                    target,
+                    result.response.addr,
+                    str(result.response.sequence),
+                    f"{result.response.rtt:.2f}",
+                    "reply",
+                )
+            elif result.error:
+                table.add_row(target, "-", "-", "-", f"error: {result.error}")
+            else:
+                table.add_row(target, "-", "-", "-", "timeout")
+
+        if new_results:
+            table.move_cursor(row=len(new_results) - 1, scroll=True)
 
 class MultiPingView(BaseToolView):
     """Form for running multiple echo requests."""
@@ -386,66 +416,32 @@ class MtrView(BaseToolView):
 class IcmpxApp(App):
     """Main Textual application hosting the icmpx tools."""
 
-    CSS = """
-    App {
-        layout: horizontal;
-    }
-
-    ToolNav {
-        width: 24;
-        border: tall $secondary;
-    }
-
-    #content {
-        width: 1fr;
-        padding: 1 2;
-    }
-
-    DataTable {
-        height: auto;
-        margin-top: 1;
-    }
-
-    Static#multiping-summary {
-        padding: 1;
-        border: round $accent;
-        margin-top: 1;
-    }
-    """
+    CSS_PATH = 'style.tcss'
 
     BINDINGS = [
         ("q", "quit", "Quit"),
     ]
 
-    current_view = reactive("ping")
-
     def compose(self) -> ComposeResult:
-        with Horizontal():
-            yield ToolNav(id="nav")
-            with Container(id="content"):
-                with ContentSwitcher(initial="ping"):
-                    yield PingView(view_id="ping")
-                    yield MultiPingView(view_id="multiping")
-                    yield TracerouteView(view_id="traceroute")
-                    yield MtrView(view_id="mtr")
+        with Horizontal(id='main-container'):
+            with Vertical(id='nav-container'):
+                yield Button("Ping", id="ping", classes='nav-button', flat=True)
+                yield Button("MultiPing", id="multiping", classes='nav-button', flat=True)
+                yield Button("Traceroute", id="traceroute", classes='nav-button', flat=True)
+                yield Button("MTR", id="mtr", classes='nav-button', flat=True)
+            with ContentSwitcher(initial="ping", id='content-container'):
+                yield PingView(id="ping")
+                yield MultiPingView(view_id="multiping")
+                yield TracerouteView(view_id="traceroute")
+                yield MtrView(view_id="mtr")
+        yield Footer()
 
-    def on_mount(self) -> None:  # noqa: D401
-        nav = self.query_one(ToolNav)
-        nav.index = 0
-
-    @on(ListView.Selected, "#nav")
-    def on_nav_selected(self, event: ListView.Selected) -> None:  # noqa: D401
-        view_id = event.item.id or "ping"
-        self.current_view = view_id
+    @on(Button.Pressed, ".nav-button")
+    def on_nav_selected(self, event: Button.Pressed) -> None:  # noqa: D401
+        view_id = event.button.id or "ping"
         self.query_one(ContentSwitcher).current = view_id
 
 
-def run() -> None:
-    """Convenience entry point for launching the TUI."""
-
+if __name__ == "__main__":
     app = IcmpxApp()
     app.run()
-
-
-if __name__ == "__main__":
-    run()

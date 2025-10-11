@@ -1,0 +1,39 @@
+App {
+    layout: horizontal;
+}
+
+#nav-container {
+    width: 20;
+    border: tall $secondary;
+    padding: 1;
+}
+
+#content-container {
+    width: 1fr;
+    padding: 1;
+    border: tall $secondary;
+}
+
+
+#ping-form {
+    height: 10;
+    #ping-options > Vertical {
+        height: auto;
+        margin: 1;
+    }
+    #ping-submit {
+        margin-left: 1;
+    }
+}
+
+
+DataTable {
+    margin: 1;
+    padding: 0;
+}
+
+Static#multiping-summary {
+    padding: 1;
+    border: round $accent;
+    margin-top: 1;
+}
