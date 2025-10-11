@@ -102,6 +102,20 @@ Explore [`icmpx/_icmp.py`](icmpx/_icmp.py), [`icmpx/_multiping.py`](icmpx/_multi
 - [ ] Integração com SNMP para coleta de métricas adicionais
 - [ ] Demo TUI com Textual
 
+## Demo TUI com Textual
+
+Execute a interface interativa com:
+
+```bash
+uv run icmpx/tui.py
+```
+
+A TUI concentra ping, multiping, traceroute e MTR em um menu lateral. Cada ferramenta roda em uma *worker thread*, o que mantém a interface fluida enquanto as tabelas recebem novos resultados.
+
+Dica: use o botão de *follow* na tela de Ping para acompanhar automaticamente novas respostas ou desative-o para analisar linhas antigas.
+
+![Demo TUI](docs/ping_tui.png)
+
 ### Inspiração
 
 [icmplib](https://github.com/ValentinBELYN/icmplib.git)
