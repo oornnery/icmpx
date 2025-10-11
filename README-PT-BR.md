@@ -1,34 +1,34 @@
 # icmpx
 
-A straightforward library for exploring ICMP in Python. With raw sockets and Rich rendering, it provides single ping, multiping, traceroute, and MTR with readable output.
+Uma biblioteca direta para explorar ICMP em Python. Com sockets e formatação via Rich, ela provê ping individual, multiping, traceroute e MTR com saídas prontas para leitura.
 
-## Features
+## Recursos
 
-- Single ping with RTT statistics
-- Multiping with latency aggregation and loss tracking
-- Traceroute with optional DNS resolution and multiple probes per hop
-- Simplified MTR to monitor loss and jitter per hop
+- Ping único com estatísticas de RTT
+- Multiping com agregação de latências e perda
+- Traceroute com resolução DNS opcional e múltiplas sondas
+- MTR simplificado para acompanhar perda e jitter por hop
 
-## Prerequisites
+Pré-requisitos
 
-- Python 3.14 or newer (see `pyproject.toml`)
-- `CAP_NET_RAW` capability to open ICMP sockets
+- Python 3.14 ou superior (veja `pyproject.toml`)
+- Permissão `CAP_NET_RAW` para abrir sockets ICMP
 
-Grant the capability to the interpreter before running:
+Conceda a permissão ao interpretador antes de executar:
 
 ```bash
 sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 ```
 
-## Quick Start
+## Uso rápido
 
-Sync dependencies (for example, `uv sync`) and run the demo script:
+Sincronize as dependências (por exemplo, `uv sync`) e execute o script de demonstração:
 
 ```bash
 uv run src/main.py
 ```
 
-The core code stays minimal:
+O trecho central é enxuto:
 
 ```python
 from _icmp import Icmp, console
@@ -45,7 +45,7 @@ with Icmp() as icmp:
 
 ```
 
-## Typical Output
+## Saída típica
 
 ```text
 Reply from 8.8.8.8: time=7.92 ms (seq=1)
@@ -83,18 +83,18 @@ Hop  Address              Hostname                                  Loss%  Sent 
 10   8.8.8.8              dns.google                                  0.0     5     5     7.26     9.73    13.05
 ```
 
-Explore `src/_icmp.py` to adjust timeouts, probe counts, and cycles as needed.
+Explore `src/_icmp.py` para ajustar timeouts, número de sondas e ciclos conforme sua necessidade.
 
-## Future Plans
+## Funcionalidades Futuras
 
 - [ ] IPv6
-- [ ] Advanced statistics (jitter, standard deviation)
-- [ ] Asynchronous support with `asyncio`
-- [ ] Comprehensive documentation
-- [ ] Unit tests
-- [ ] Windows support
-- [ ] SNMP integration for additional metrics
+- [ ] Estatísticas avançadas (jitter, desvio padrão)
+- [ ] Suporte assíncrono com `asyncio`
+- [ ] Documentação abrangente
+- [ ] Testes unitários
+- [ ] Suporte a Windows
+- [ ] Integração com SNMP para coleta de métricas adicionais
 
-### Inspiration
+### Inspiração
 
 [icmplib](https://github.com/ValentinBELYN/icmplib.git)
