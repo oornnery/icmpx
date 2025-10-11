@@ -1,30 +1,26 @@
 from ._icmp import (
     EchoResponse,
     EchoResult,
-    EchoStats,
     Icmp,
     IcmpPacket,
     IpHeader,
-    MtrHop,
-    MtrResult,
-    MultiPingResult,
     RawSocketPermissionError,
     ReceivedPacket,
     SentPacket,
-    TracerouteHop,
-    TracerouteProbe,
-    TracerouteResult,
     console,
     logger,
 )
+from ._mtr import MtrHop, MtrResult, mtr
+from ._multiping import EchoStats, MultiPingResult, multiping
+from ._traceroute import TracerouteHop, TracerouteProbe, TracerouteResult, traceroute
 
 __all__ = [
     "EchoResponse",
     "EchoResult",
-    "EchoStats",
     "Icmp",
     "IcmpPacket",
     "IpHeader",
+    "EchoStats",
     "MtrHop",
     "MtrResult",
     "MultiPingResult",
@@ -34,6 +30,9 @@ __all__ = [
     "TracerouteHop",
     "TracerouteProbe",
     "TracerouteResult",
+    "multiping",
+    "traceroute",
+    "mtr",
     "console",
     "logger",
 ]

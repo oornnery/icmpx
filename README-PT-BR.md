@@ -37,17 +37,17 @@ uv run -m icmpx
 O trecho central é enxuto (veja [`icmpx/main.py`](icmpx/main.py)):
 
 ```python
-from icmpx import Icmp, console
+from icmpx import Icmp, console, mtr, multiping, traceroute
 
 with Icmp() as icmp:
-    ex1 = icmp.ping(target)
-    console.print(ex1)
-    ex2 = icmp.multiping(target)
-    console.print(ex2)
-    ex3 = icmp.traceroute(target, resolve_dns=True)
-    console.print(ex3)
-    ex4 = icmp.mtr(target, resolve_dns=True)
-    console.print(ex4)
+  ex1 = icmp.ping(target)
+  console.print(ex1)
+  ex2 = multiping(icmp, target)
+  console.print(ex2)
+  ex3 = traceroute(icmp, target, resolve_dns=True)
+  console.print(ex3)
+  ex4 = mtr(icmp, target, resolve_dns=True)
+  console.print(ex4)
 
 ```
 
@@ -89,7 +89,7 @@ Hop  Address              Hostname                                  Loss%  Sent 
 10   8.8.8.8              dns.google                                  0.0     5     5     7.26     9.73    13.05
 ```
 
-Explore [`icmpx/_icmp.py`](icmpx/_icmp.py) para ajustar timeouts, número de sondas e ciclos conforme sua necessidade.
+Explore [`icmpx/_icmp.py`](icmpx/_icmp.py), [`icmpx/_multiping.py`](icmpx/_multiping.py), [`icmpx/_traceroute.py`](icmpx/_traceroute.py) e [`icmpx/_mtr.py`](icmpx/_mtr.py) para ajustar timeouts, número de sondas e ciclos conforme sua necessidade.
 
 ## Funcionalidades Futuras
 
