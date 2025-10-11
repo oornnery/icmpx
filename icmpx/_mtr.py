@@ -85,7 +85,9 @@ def mtr(
         logger.error(str(exc))
         return MtrResult(target=dest_addr, resolved=dest_addr, cycles=cycles, hops=[])
 
-    samples: dict[int, list[Optional[float]]] = {ttl: [] for ttl in range(1, max_hops + 1)}
+    samples: dict[int, list[Optional[float]]] = {
+        ttl: [] for ttl in range(1, max_hops + 1)
+    }
     addresses: dict[int, Optional[str]] = {ttl: None for ttl in range(1, max_hops + 1)}
     hostnames: dict[int, Optional[str]] = {ttl: None for ttl in range(1, max_hops + 1)}
 

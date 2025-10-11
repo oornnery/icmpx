@@ -140,7 +140,7 @@ class Icmp:
                 raise RawSocketPermissionError(message) from exc
             self._sock.settimeout(self.timeout)
         return self._sock
-    
+
     @staticmethod
     def _valid_ip(host: str) -> bool:
         try:
@@ -186,7 +186,6 @@ class Icmp:
         if self._valid_ip(dest_addr):
             return dest_addr
         return self._resolve_host(dest_addr)
-
 
     def close(self) -> None:
         if self._sock is not None:

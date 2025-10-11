@@ -6,7 +6,7 @@ from typing import Callable, Optional
 
 from textual import on, work
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, VerticalScroll, Vertical
+from textual.containers import Horizontal, VerticalScroll, Vertical
 from textual.reactive import reactive
 from textual.widgets import (
     Button,
@@ -15,7 +15,7 @@ from textual.widgets import (
     Input,
     Label,
     Static,
-    Footer
+    Footer,
 )
 from textual.worker import Worker
 
@@ -94,12 +94,12 @@ class PingView(Vertical):
 
     title = "Ping"
     results = reactive(tuple())
-    
+
     def compose(self) -> ComposeResult:
-        with Vertical(id='ping-form'):
+        with Vertical(id="ping-form"):
             yield Label(" Target")
             yield Input(placeholder="8.8.8.8", id="ping-target", value="8.8.8.8")
-            with Horizontal(id='ping-options'):
+            with Horizontal(id="ping-options"):
                 with Vertical():
                     yield Label("TTL")
                     yield Input(placeholder="64", id="ping-ttl", compact=True)
@@ -133,7 +133,9 @@ class PingView(Vertical):
         )
 
     @work(thread=True)
-    def perform_ping(self, target: str, count: int = 10, ttl: int = 64, timeout: float = 1.0) -> None:
+    def perform_ping(
+        self, target: str, count: int = 10, ttl: int = 64, timeout: float = 1.0
+    ) -> None:
         """Perform a series of pings to measure performance."""
         with Icmp() as icmp:
             for _ in range(count):
@@ -176,6 +178,7 @@ class PingView(Vertical):
 
         if new_results:
             table.move_cursor(row=len(new_results) - 1, scroll=True)
+
 
 class MultiPingView(BaseToolView):
     """Form for running multiple echo requests."""
@@ -416,20 +419,24 @@ class MtrView(BaseToolView):
 class IcmpxApp(App):
     """Main Textual application hosting the icmpx tools."""
 
-    CSS_PATH = 'style.tcss'
+    CSS_PATH = "style.tcss"
 
     BINDINGS = [
         ("q", "quit", "Quit"),
     ]
 
     def compose(self) -> ComposeResult:
-        with Horizontal(id='main-container'):
-            with Vertical(id='nav-container'):
-                yield Button("Ping", id="ping", classes='nav-button', flat=True)
-                yield Button("MultiPing", id="multiping", classes='nav-button', flat=True)
-                yield Button("Traceroute", id="traceroute", classes='nav-button', flat=True)
-                yield Button("MTR", id="mtr", classes='nav-button', flat=True)
-            with ContentSwitcher(initial="ping", id='content-container'):
+        with Horizontal(id="main-container"):
+            with Vertical(id="nav-container"):
+                yield Button("Ping", id="ping", classes="nav-button", flat=True)
+                yield Button(
+                    "MultiPing", id="multiping", classes="nav-button", flat=True
+                )
+                yield Button(
+                    "Traceroute", id="traceroute", classes="nav-button", flat=True
+                )
+                yield Button("MTR", id="mtr", classes="nav-button", flat=True)
+            with ContentSwitcher(initial="ping", id="content-container"):
                 yield PingView(id="ping")
                 yield MultiPingView(view_id="multiping")
                 yield TracerouteView(view_id="traceroute")
