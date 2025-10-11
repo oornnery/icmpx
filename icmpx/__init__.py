@@ -35,5 +35,5 @@ __all__ = [
     "TracerouteProbe",
     "TracerouteResult",
     "console",
-    "logger"
+    "logger",
 ]

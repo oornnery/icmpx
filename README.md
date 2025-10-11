@@ -25,23 +25,29 @@ sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 Sync dependencies (for example, `uv sync`) and run the demo script:
 
 ```bash
-uv run src/main.py
+uv run main.py
 ```
 
-The core code stays minimal:
+Or execute the package directly:
+
+```bash
+uv run -m icmpx
+```
+
+The core code stays minimal (see [`icmpx/main.py`](icmpx/main.py)):
 
 ```python
-from _icmp import Icmp, console
+from icmpx import Icmp, console
 
 with Icmp() as icmp:
-    ex1 = icmp.ping(target)
-    console.print(ex1)
-    ex2 = icmp.multiping(target)
-    console.print(ex2)
-    ex3 = icmp.traceroute(target, resolve_dns=True)
-    console.print(ex3)
-    ex4 = icmp.mtr(target, resolve_dns=True)
-    console.print(ex4)
+  ex1 = icmp.ping(target)
+  console.print(ex1)
+  ex2 = icmp.multiping(target)
+  console.print(ex2)
+  ex3 = icmp.traceroute(target, resolve_dns=True)
+  console.print(ex3)
+  ex4 = icmp.mtr(target, resolve_dns=True)
+  console.print(ex4)
 
 ```
 
@@ -83,7 +89,7 @@ Hop  Address              Hostname                                  Loss%  Sent 
 10   8.8.8.8              dns.google                                  0.0     5     5     7.26     9.73    13.05
 ```
 
-Explore `src/_icmp.py` to adjust timeouts, probe counts, and cycles as needed.
+Explore [`icmpx/_icmp.py`](icmpx/_icmp.py) to adjust timeouts, probe counts, and cycles as needed.
 
 ## Future Plans
 
@@ -94,6 +100,7 @@ Explore `src/_icmp.py` to adjust timeouts, probe counts, and cycles as needed.
 - [ ] Unit tests
 - [ ] Windows support
 - [ ] SNMP integration for additional metrics
+- [ ] Textual-based TUI demo interface
 
 ### Inspiration
 

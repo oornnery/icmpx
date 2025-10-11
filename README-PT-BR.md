@@ -25,13 +25,19 @@ sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 Sincronize as dependências (por exemplo, `uv sync`) e execute o script de demonstração:
 
 ```bash
-uv run src/main.py
+uv run main.py
 ```
 
-O trecho central é enxuto:
+Ou execute o pacote diretamente:
+
+```bash
+uv run -m icmpx
+```
+
+O trecho central é enxuto (veja [`icmpx/main.py`](icmpx/main.py)):
 
 ```python
-from _icmp import Icmp, console
+from icmpx import Icmp, console
 
 with Icmp() as icmp:
     ex1 = icmp.ping(target)
@@ -83,7 +89,7 @@ Hop  Address              Hostname                                  Loss%  Sent 
 10   8.8.8.8              dns.google                                  0.0     5     5     7.26     9.73    13.05
 ```
 
-Explore `src/_icmp.py` para ajustar timeouts, número de sondas e ciclos conforme sua necessidade.
+Explore [`icmpx/_icmp.py`](icmpx/_icmp.py) para ajustar timeouts, número de sondas e ciclos conforme sua necessidade.
 
 ## Funcionalidades Futuras
 
@@ -94,6 +100,7 @@ Explore `src/_icmp.py` para ajustar timeouts, número de sondas e ciclos conform
 - [ ] Testes unitários
 - [ ] Suporte a Windows
 - [ ] Integração com SNMP para coleta de métricas adicionais
+- [ ] Demo TUI com Textual
 
 ### Inspiração
 
