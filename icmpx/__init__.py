@@ -8,7 +8,7 @@ from ._models import (
     ReceivedPacket,
     SentPacket,
     TracerouteEntry,
-    TracerouteResult
+    TracerouteResult,
 )
 
 from ._exceptions import RawSocketPermissionError

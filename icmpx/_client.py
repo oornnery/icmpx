@@ -17,7 +17,7 @@ from ._models import (
     ReceivedPacket,
     SentPacket,
     TracerouteEntry,
-    TracerouteResult
+    TracerouteResult,
 )
 
 from ._exceptions import RawSocketPermissionError
@@ -35,10 +35,7 @@ ICMP_TIMESTAMP_REPLY = 14
 
 logger = logging.getLogger("icmpx")
 if not logger.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s: %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 class Client:
@@ -59,12 +56,12 @@ class Client:
 
     def __enter__(self) -> Client:
         return self
-    
+
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         if self._sock:
             self._sock.close()
             self._sock = None
-    
+
     # ------------- Utilitários DNS/IP -------------
 
     @staticmethod
@@ -123,7 +120,7 @@ class Client:
             data += b"\x00"
         total = sum(struct.unpack("!%dH" % (len(data) // 2), data))
         total = (total >> 16) + (total & 0xFFFF)
-        total += (total >> 16)
+        total += total >> 16
         return (~total) & 0xFFFF
 
     # ------------- Construção e parsing -------------
@@ -137,7 +134,9 @@ class Client:
         body = ts_bytes + (payload or b"")
         header = struct.pack("!BBHHH", ICMP_ECHO_REQUEST, 0, 0, self._identifier, seq)
         csum = self._checksum(header + body)
-        header = struct.pack("!BBHHH", ICMP_ECHO_REQUEST, 0, csum, self._identifier, seq)
+        header = struct.pack(
+            "!BBHHH", ICMP_ECHO_REQUEST, 0, csum, self._identifier, seq
+        )
         packet_bytes = header + body
         icmp = ICMPPacket(
             id=self._identifier,
@@ -211,7 +210,9 @@ class Client:
             sequence=seq,
             payload=icmp_payload,
         )
-        return ReceivedPacket(ip_header=ip, icmp_packet=icmp, raw=raw, received_at=received_at)
+        return ReceivedPacket(
+            ip_header=ip, icmp_packet=icmp, raw=raw, received_at=received_at
+        )
 
     @staticmethod
     def _extract_inner_echo_id_seq(icmp_payload: bytes) -> tuple[int, int] | None:
@@ -227,7 +228,9 @@ class Client:
             return None
         inner_icmp_hdr = icmp_payload[inner_ip_len : inner_ip_len + 8]
         try:
-            inner_type, _, _, inner_id, inner_seq = struct.unpack("!BBHHH", inner_icmp_hdr)
+            inner_type, _, _, inner_id, inner_seq = struct.unpack(
+                "!BBHHH", inner_icmp_hdr
+            )
         except struct.error:
             return None
         if inner_type != ICMP_ECHO_REQUEST:
@@ -237,7 +240,12 @@ class Client:
     def _match_probe(self, ident: int, seq: int, pkt: ICMPPacket) -> bool:
         if pkt.type == ICMP_ECHO_REPLY and pkt.id == ident and pkt.sequence == seq:
             return True
-        if pkt.type in (ICMP_TIME_EXCEEDED, ICMP_DEST_UNREACHABLE, ICMP_PARAMETER_PROBLEM, ICMP_REDIRECT):
+        if pkt.type in (
+            ICMP_TIME_EXCEEDED,
+            ICMP_DEST_UNREACHABLE,
+            ICMP_PARAMETER_PROBLEM,
+            ICMP_REDIRECT,
+        ):
             inner = self._extract_inner_echo_id_seq(pkt.payload)
             return inner == (ident, seq)
         return False
@@ -297,7 +305,9 @@ class Client:
             sent = self._send(addr, ttl_val, payload)
             rcv = self._receive(self._identifier, sent.packet.sequence, timeout_val)
         hostname = self.reverse_dns(addr) if do_dns else None
-        request = EchoRequest(addr=addr, hostname=hostname, ttl=ttl_val, sent_packet=sent)
+        request = EchoRequest(
+            addr=addr, hostname=hostname, ttl=ttl_val, sent_packet=sent
+        )
 
         if rcv is None:
             return EchoResult(
@@ -351,7 +361,9 @@ class Client:
                 sent = self._send(addr, self.default_ttl, b"\x00" * max(0, size))
                 rcv = self._receive(self._identifier, sent.packet.sequence, timeout_val)
                 hostname = self.reverse_dns(addr) if do_dns else None
-                request = EchoRequest(addr=addr, hostname=hostname, ttl=self.default_ttl, sent_packet=sent)
+                request = EchoRequest(
+                    addr=addr, hostname=hostname, ttl=self.default_ttl, sent_packet=sent
+                )
                 if rcv is None:
                     results.append(
                         EchoResult(
@@ -410,9 +422,13 @@ class Client:
 
                 for _ in range(probes):
                     sent = self._send(resolved, ttl, b"\x00" * max(0, size))
-                    rcv = self._receive(self._identifier, sent.packet.sequence, timeout_val)
+                    rcv = self._receive(
+                        self._identifier, sent.packet.sequence, timeout_val
+                    )
                     if rcv is None:
-                        per_hop_replies.append(EchoReply(rtt=float("inf"), received_packet=None))
+                        per_hop_replies.append(
+                            EchoReply(rtt=float("inf"), received_packet=None)
+                        )
                         continue
 
                     rtt_ms = (rcv.received_at - sent.timestamp) * 1000.0
@@ -422,12 +438,21 @@ class Client:
                         hop_addr = rcv.ip_header.src_addr
                         hop_host = self.reverse_dns(hop_addr) if do_dns else None
                     # Verificar se destino foi alcançado
-                    if rcv.icmp_packet.type == ICMP_ECHO_REPLY and rcv.ip_header.src_addr == resolved:
+                    if (
+                        rcv.icmp_packet.type == ICMP_ECHO_REPLY
+                        and rcv.ip_header.src_addr == resolved
+                    ):
                         reached = True
 
-                hops.append(TracerouteEntry(ttl=ttl, probes=per_hop_replies, addr=hop_addr, hostname=hop_host))
+                hops.append(
+                    TracerouteEntry(
+                        ttl=ttl,
+                        probes=per_hop_replies,
+                        addr=hop_addr,
+                        hostname=hop_host,
+                    )
+                )
                 if reached:
                     break
 
         return TracerouteResult(target=target, resolved=resolved, hops=hops)
-

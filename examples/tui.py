@@ -156,7 +156,9 @@ class MultiPingView(Vertical):
             with Horizontal(id="multiping-options"):
                 with Vertical():
                     yield Label("Count")
-                    yield Input(placeholder="4", id="multiping-count", value="4", compact=True)
+                    yield Input(
+                        placeholder="4", id="multiping-count", value="4", compact=True
+                    )
                 with Vertical():
                     yield Label("Interval (s)")
                     yield Input(
@@ -204,9 +206,7 @@ class MultiPingView(Vertical):
 
         targets_raw = self.query_one("#multiping-targets", Input).value or ""
         targets = [
-            part.strip()
-            for part in re.split(r"[\s,]+", targets_raw)
-            if part.strip()
+            part.strip() for part in re.split(r"[\s,]+", targets_raw) if part.strip()
         ]
         if not targets:
             self.notify("Please provide at least one target.")
@@ -264,8 +264,7 @@ class MultiPingView(Vertical):
                         )
                         app.call_from_thread(self._record_result, target, result)
                         is_last_probe = (
-                            target_index == len(targets) - 1
-                            and attempt == count - 1
+                            target_index == len(targets) - 1 and attempt == count - 1
                         )
                         if interval > 0 and not is_last_probe:
                             time.sleep(interval)
@@ -671,7 +670,10 @@ class MtrView(Vertical):
                             hostname: Optional[str] = None
                             rtt: Optional[float] = None
 
-                            if result.received_packet is not None and result.sent_packet is not None:
+                            if (
+                                result.received_packet is not None
+                                and result.sent_packet is not None
+                            ):
                                 address = result.received_packet.ip_header.src_addr
                                 if address not in dns_cache:
                                     dns_cache[address] = (
@@ -740,8 +742,12 @@ class MtrView(Vertical):
             stats["received"] += 1
             stats["rtt_sum"] += rtt
             stats["rtt_count"] += 1
-            stats["rtt_min"] = rtt if stats["rtt_min"] is None else min(stats["rtt_min"], rtt)
-            stats["rtt_max"] = rtt if stats["rtt_max"] is None else max(stats["rtt_max"], rtt)
+            stats["rtt_min"] = (
+                rtt if stats["rtt_min"] is None else min(stats["rtt_min"], rtt)
+            )
+            stats["rtt_max"] = (
+                rtt if stats["rtt_max"] is None else max(stats["rtt_max"], rtt)
+            )
 
         self._refresh_mtr_table()
 
@@ -762,7 +768,19 @@ class MtrView(Vertical):
             ),
         )
 
-        rows: list[tuple[str, str, str, float, int, int, Optional[float], Optional[float], Optional[float]]] = []
+        rows: list[
+            tuple[
+                str,
+                str,
+                str,
+                float,
+                int,
+                int,
+                Optional[float],
+                Optional[float],
+                Optional[float],
+            ]
+        ] = []
         for key in self._mtr_order:
             stats = self._mtr_stats[key]
             ttls = sorted(stats["ttls"])
@@ -795,7 +813,17 @@ class MtrView(Vertical):
                 )
             )
 
-        for hop_label, address, hostname, loss_percent, sent, received, rtt_min, rtt_avg, rtt_max in rows:
+        for (
+            hop_label,
+            address,
+            hostname,
+            loss_percent,
+            sent,
+            received,
+            rtt_min,
+            rtt_avg,
+            rtt_max,
+        ) in rows:
             table.add_row(
                 hop_label,
                 address,
