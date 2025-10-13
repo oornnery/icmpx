@@ -456,3 +456,8 @@ class Client:
                     break
 
         return TracerouteResult(target=target, resolved=resolved, hops=hops)
+
+
+class AsyncClient(Client):
+    # Placeholder para futura implementação assíncrona
+    pass
