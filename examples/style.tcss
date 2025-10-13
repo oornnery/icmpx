@@ -15,14 +15,28 @@ App {
 }
 
 
-#ping-form {
+#ping-form,
+#multiping-form,
+#traceroute-form,
+#mtr-form {
+
     height: 10;
-    #ping-options > Vertical {
+    padding: 0 1;
+
+    #ping-options > Vertical,
+    #multiping-options > Vertical,
+    #traceroute-options > Vertical,
+    #mtr-options > Vertical {
         height: auto;
-        margin: 1;
+        margin: 1 1 0 0;
     }
-    #ping-submit {
+
+    #ping-submit,
+    #multiping-run,
+    #traceroute-run,
+    #mtr-run {
         margin-left: 1;
+        width: 20;
     }
 }
 
