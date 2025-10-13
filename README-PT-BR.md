@@ -23,13 +23,18 @@ sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 
 ## Início rápido
 
-Sincronize as dependências com uma ferramenta como `uv`:
+Clone o repositório e configure o ambiente com `uv`:
 
 ```bash
+git clone https://github.com/oornnery/icmpx.git
+cd icmpx
+uv venv
 uv sync
+uv pip install .
+sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 ```
 
-Execute qualquer script de exemplo:
+Depois de conceder `CAP_NET_RAW`, execute qualquer script de exemplo:
 
 ```bash
 uv run examples/ping.py

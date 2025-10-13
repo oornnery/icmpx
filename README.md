@@ -23,13 +23,18 @@ sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 
 ## Getting Started
 
-Install dependencies with a tool such as `uv`:
+Get the sources and prepare a `uv` environment:
 
 ```bash
+git clone https://github.com/oornnery/icmpx.git
+cd icmpx
+uv venv
 uv sync
+uv pip install .
+sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 ```
 
-Then run any of the example scripts:
+After granting `CAP_NET_RAW`, run any of the examples:
 
 ```bash
 uv run examples/ping.py
