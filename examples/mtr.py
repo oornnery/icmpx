@@ -38,7 +38,7 @@ def _build_table(
         caption=caption,
         box=box.SQUARE,
         expand=True,
-        )
+    )
     table.add_column("Hop", justify="right", style="cyan", no_wrap=True)
     table.add_column("Address", style="magenta")
     table.add_column("Hostname", style="green")
@@ -158,7 +158,9 @@ def main() -> None:
     parser.add_argument("host", nargs="?", default="8.8.8.8", help="target host")
     parser.add_argument("-c", "--cycles", type=int, default=5, help="number of cycles")
     parser.add_argument("-m", "--max-hops", type=int, default=30, help="max hop TTL")
-    parser.add_argument("-t", "--timeout", type=float, default=1.0, help="probe timeout")
+    parser.add_argument(
+        "-t", "--timeout", type=float, default=1.0, help="probe timeout"
+    )
     parser.add_argument(
         "-i",
         "--interval",
@@ -194,4 +196,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
-    
