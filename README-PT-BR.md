@@ -81,11 +81,40 @@ with Client(resolve_dns_default=True) as client:
 
 `Client.traceroute()` retorna um `TracerouteResult` com metadados por hop, incluindo *reverse DNS* opcional e todos os RTTs coletados.
 
+### Loop MTR em tempo real
+
+```bash
+uv run examples/mtr.py 1.1.1.1 -c 10 -i 0.5
+```
+
+O script atualiza uma tabela Rich com perda de pacotes e métricas de RTT por hop a cada ciclo configurado.
+
+```bash
+(icmpx) ➜  icmpx git:(main) ✗ uv run examples/mtr.py 8.8.8.8 -c 100
+Found existing alias for "uv run". You should use: "uvr"
+                                                                                       MTR to 8.8.8.8
+┌─────────┬─────────────────────────────┬──────────────────────────────────────────────────────────────┬──────────┬──────────┬──────────────┬────────────┬───────────┬──────────┬──────────┐
+│     Hop │ Address                     │ Hostname                                                     │     Sent │     Recv │       Loss % │       Last │       Avg │     Best │    Worst │
+├─────────┼─────────────────────────────┼──────────────────────────────────────────────────────────────┼──────────┼──────────┼──────────────┼────────────┼───────────┼──────────┼──────────┤
+│       1 │ 172.19.112.1                │ _gateway                                                     │      100 │      100 │          0.0 │       0.69 │      0.53 │     0.30 │     5.53 │
+│       2 │ 192.168.15.1                │ menuvivofibra                                                │      100 │      100 │          0.0 │       3.52 │      5.46 │     3.07 │    37.70 │
+│       3 │ 189.97.117.7                │ ip-189-97-117-7.user.vivozap.com.br                          │      100 │      100 │          0.0 │       7.77 │      9.46 │     5.46 │    30.08 │
+│       4 │ 201.1.228.105               │ 201-1-228-105.dsl.telesp.net.br                              │      100 │      100 │          0.0 │       9.13 │      9.58 │     4.53 │    28.16 │
+│       5 │ 187.100.196.140             │ 187-100-196-140.dsl.telesp.net.br                            │      100 │       72 │         28.0 │      13.78 │     11.10 │     4.97 │    41.67 │
+│       6 │ ?                           │                                                              │      100 │        0 │        100.0 │          - │         - │        - │        - │
+│       7 │ 72.14.220.222               │                                                              │      100 │      100 │          0.0 │       7.78 │     11.94 │     5.76 │    46.18 │
+│       8 │ 172.253.69.243              │                                                              │      100 │      100 │          0.0 │      10.51 │     11.85 │     7.07 │    29.55 │
+│       9 │ 108.170.248.215             │                                                              │      100 │      100 │          0.0 │      12.49 │     10.69 │     5.80 │    30.14 │
+│      10 │ 8.8.8.8                     │ dns.google                                                   │      100 │      100 │          0.0 │       9.79 │     10.79 │     5.82 │    42.93 │
+└─────────┴─────────────────────────────┴──────────────────────────────────────────────────────────────┴──────────┴──────────┴──────────────┴────────────┴───────────┴──────────┴──────────┘
+```
+
 ## Scripts de exemplo
 
 - `examples/ping.py` — caminho mais curto para enviar múltiplos echos ICMP
 - `examples/traceroute.py` — descoberta hop a hop usando a API da biblioteca
 - `examples/tui.py` — TUI experimental em Textual (depende de módulos em desenvolvimento)
+- `examples/mtr.py` — tabela dinâmica com Rich que imita o fluxo do `mtr`
 
 Copie esses scripts como ponto de partida ou integre o `Client` diretamente em serviços existentes.
 
