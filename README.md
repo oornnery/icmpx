@@ -1,121 +1,103 @@
 # icmpx
 
-A straightforward library for exploring ICMP in Python. With raw sockets and Rich rendering, it provides single ping, multiping, traceroute, and MTR with readable output.
+A Python library for building ICMP diagnostics with raw sockets. The current API focuses on reusable building blocks instead of wrapping platform tools, so you can compose pings, probes, and traceroute-like flows directly from Python.
 
 ## Features
 
-- Single ping with RTT statistics
-- Multiping with latency aggregation and loss tracking
-- Traceroute with optional DNS resolution and multiple probes per hop
-- Simplified MTR to monitor loss and jitter per hop
+- Context-managed `Client` that takes care of raw socket setup and teardown
+- `probe()` for single TTL measurements, `ping()` for repeated samples, and `traceroute()` for hop discovery
+- Rich dataclasses (`EchoResult`, `TracerouteResult`, `ReceivedPacket`, and friends) for post-processing and formatting
+- Optional reverse DNS lookup per request
+- Clear `RawSocketPermissionError` when the interpreter lacks `CAP_NET_RAW`
 
-## Prerequisites
+## Requirements
 
 - Python 3.14 or newer (see `pyproject.toml`)
-- `CAP_NET_RAW` capability to open ICMP sockets
+- A Linux environment with permission to open ICMP raw sockets
 
-Grant the capability to the interpreter before running:
+Grant the capability once for your Python interpreter:
 
 ```bash
 sudo setcap cap_net_raw+ep "$(realpath $(which python))"
 ```
 
-## Quick Start
+## Getting Started
 
-Sync dependencies (for example, `uv sync`) and run the demo script:
-
-```bash
-uv run main.py
-```
-
-Or execute the package directly:
+Install dependencies with a tool such as `uv`:
 
 ```bash
-uv run -m icmpx
+uv sync
 ```
 
-The core code stays minimal (see [`icmpx/main.py`](icmpx/main.py)):
+Then run any of the example scripts:
+
+```bash
+uv run examples/ping.py
+```
+
+Or explore the traceroute example:
+
+```bash
+uv run examples/traceroute.py
+```
+
+## Usage Examples
+
+### Basic ping loop
 
 ```python
-from icmpx import Icmp, console, mtr, multiping, traceroute
+from icmpx import Client
 
-with Icmp() as icmp:
-  ex1 = icmp.ping(target)
-  console.print(ex1)
-  ex2 = multiping(icmp, target)
-  console.print(ex2)
-  ex3 = traceroute(icmp, target, resolve_dns=True)
-  console.print(ex3)
-  ex4 = mtr(icmp, target, resolve_dns=True)
-  console.print(ex4)
-
+with Client(timeout=1.5) as client:
+    results = client.ping("8.8.8.8", count=3)
+    for result in results:
+        if result.error:
+            print(f"{result.request.addr}: {result.error}")
+        else:
+            print(
+                f"reply from {result.reply.received_packet.ip_header.src_addr} "
+                f"in {result.reply.rtt:.2f} ms"
+            )
 ```
 
-## Typical Output
+Each `EchoResult` carries the original request, an `EchoReply` with the measured RTT, and any ICMP errors returned during the exchange.
 
-```text
-Reply from 8.8.8.8: time=7.92 ms (seq=1)
+### Traceroute workflow
 
-Multiping to 8.8.8.8 (8.8.8.8):
-  Packets: Sent = 4, Received = 4, Lost = 0 (0.0% loss)
-Approximate round trip times in milli-seconds:
-  Minimum = 6.35 ms, Average = 16.54 ms, Maximum = 38.02 ms
+```python
+from icmpx import Client
 
-Traceroute to 8.8.8.8 (8.8.8.8), 3 probes per hop
-Hop  Address              Hostname                                     Probe Times (ms)
-1    172.19.112.1         _gateway                                      0.34 ms      0.81 ms      0.43 ms
-2    192.168.15.1                                                      8.53 ms      5.83 ms      3.32 ms
-3    132.37.127.7         ip-132.37.127.7.user.vivozap.com.br          11.59 ms     11.37 ms     10.68 ms
-4    201.1.228.105        201-1-228-105.dsl.telesp.net.br              10.46 ms      5.17 ms      4.21 ms
-5    187.100.196.140      187-100-196-140.dsl.telesp.net.br             5.76 ms     10.28 ms     12.29 ms
-6    ?                    ?                                           * timeout    * timeout    * timeout
-7    72.14.220.222        ?                                            11.88 ms      6.75 ms     11.34 ms
-8    172.253.69.243       ?                                            10.89 ms      8.39 ms      9.58 ms
-9    108.170.248.215      ?                                             8.76 ms      8.01 ms     11.52 ms
-10   8.8.8.8              dns.google                                    9.67 ms     10.80 ms     18.86 ms
-
-
-MTR to 8.8.8.8 (8.8.8.8), 5 cycles
-Hop  Address              Hostname                                  Loss%  Sent  Recv      Min      Avg      Max
-1    172.19.112.1         _gateway                                    0.0     5     5     0.34     0.42     0.51
-2    192.168.15.1                                                     0.0     5     5     3.37     3.90     4.35
-3    132.37.127.7         ip-132.37.127.7.user.vivozap.com.br         0.0     5     5     5.58     8.82    11.36
-4    201.1.228.105        201-1-228-105.dsl.telesp.net.br             0.0     5     5     4.35    11.89    23.09
-5    187.100.196.140      187-100-196-140.dsl.telesp.net.br           0.0     5     5     5.70     9.45    14.64
-6    ?                    ?                                         100.0     5     0        ?        ?        ?
-7    72.14.220.222        ?                                           0.0     5     5     6.98    14.91    39.26
-8    172.253.69.243       ?                                           0.0     5     5     8.00    11.41    14.07
-9    108.170.248.215      ?                                           0.0     5     5    10.10    18.15    41.16
-10   8.8.8.8              dns.google                                  0.0     5     5     7.26     9.73    13.05
+with Client(resolve_dns_default=True) as client:
+    trace = client.traceroute("1.1.1.1", probes=2)
+    for hop in trace.hops:
+        addr = hop.addr or "?"
+        host = hop.hostname or "?"
+        rtts = [
+            f"{probe.rtt:.2f} ms" if probe.rtt != float("inf") else "timeout"
+            for probe in hop.probes
+        ]
+        print(f"{hop.ttl:>2}: {addr:<16} {host:<32} {' '.join(rtts)}")
 ```
 
-Explore [`icmpx/_icmp.py`](icmpx/_icmp.py), [`icmpx/_multiping.py`](icmpx/_multiping.py), [`icmpx/_traceroute.py`](icmpx/_traceroute.py), and [`icmpx/_mtr.py`](icmpx/_mtr.py) to adjust timeouts, probe counts, and cycles as needed.
+`Client.traceroute()` returns a `TracerouteResult` with per-hop metadata, including optional reverse DNS resolution and all collected probe RTTs.
 
-## Future Plans
+## Example Scripts
 
-- [ ] IPv6
-- [ ] Advanced statistics (jitter, standard deviation)
-- [ ] Asynchronous support with `asyncio`
-- [ ] Comprehensive documentation
-- [ ] Unit tests
-- [ ] Windows support
-- [ ] SNMP integration for additional metrics
-- [ ] Textual-based TUI demo interface
+- `examples/ping.py` — shortest path to send repeated ICMP echo requests
+- `examples/traceroute.py` — hop-by-hop discovery using the library API
+- `examples/tui.py` — experimental Textual UI (depends on in-progress modules)
 
-## Textual TUI Demo
+Feel free to copy these scripts as starting points for your own automation or integrate the `Client` directly inside existing services.
 
-Launch the interactive interface with:
+## Error Handling
 
-```bash
-uv run icmpx/tui.py
-```
+If the interpreter cannot create a raw socket, `Client` raises `RawSocketPermissionError` with guidance on granting `CAP_NET_RAW`. Timeouts surface as `EchoResult.error == "timeout"` while other ICMP responses preserve their numeric type/code so you can present detailed diagnostics.
 
-The TUI bundles ping, multiping, traceroute, and MTR flows behind a navigation sidebar. Each tool spins up a worker thread so long-running probes stream into a `DataTable` without freezing the layout.
+## Roadmap
 
-Tip: use the follow toggle in the Ping view to auto-scroll with fresh replies or pause scrolling to inspect earlier rows.
+- IPv6 probes and traceroutes
+- Aggregated multiping support across multiple targets
+- asyncio-compatible client implementation
+- Additional examples and narrative documentation
 
-![TUI demo](docs/ping_tui.png)
-
-### Inspiration
-
-[icmplib](https://github.com/ValentinBELYN/icmplib.git)
+Contributions and discussion are welcome — open an issue with your use case or ideas.
