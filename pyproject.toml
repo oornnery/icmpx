@@ -12,7 +12,7 @@ dependencies = [
 authors = [
     {name = "oornnery"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 keywords = ["icmp", "ping", "traceroute", "networking", "asyncio", "textual", "rich"]
 classifiers = [
     "Programming Language :: Python :: 3 :: Only",
@@ -23,7 +23,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Topic :: System :: Networking",
     "Operating System :: POSIX :: Linux",
-    "License :: OSI Approved :: MIT License",
 ]
 [dependency-groups]
 dev = [

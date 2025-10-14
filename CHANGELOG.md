@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Added a `--bootstrap-cap` flag so `uvx icmpx` can grant `CAP_NET_RAW` to the active interpreter automatically.
 - Standardized the raw socket permission error message to English to match the CLI guidance.
 - Extended official support to Python 3.11–3.14 while preferring Python 3.14 when present.
+- Updated packaging metadata to use an SPDX license expression and satisfy modern setuptools warnings.
 
 ## [0.1.3] - 2025-10-14
 
