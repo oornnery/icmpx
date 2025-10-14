@@ -15,6 +15,8 @@ App {
 }
 
 
+
+
 #ping-form,
 #multiping-form,
 #traceroute-form,
@@ -28,7 +30,7 @@ App {
     #traceroute-options > Vertical,
     #mtr-options > Vertical {
         height: auto;
-        margin: 1 1 0 0;
+        margin: 1 1 0 1;
     }
 
     #ping-submit,
@@ -39,15 +41,24 @@ App {
         width: 20;
     }
 }
+PingView, MultiPingView, TracerouteView, MTRView {
+    layout: vertical;
+    height: 1fr;
+    width: 1fr;
+}
 
+#ping-results, #mtr-results, #multiping-results {
+    height: 1fr;
+    width: 1fr;
+}
 
-DataTable {
-    margin: 1;
+#ping-table, #mtr-table, #multiping-tablem, #traceroute-table {
+    height: 1fr;
+    margin: 1 2;
     padding: 0;
 }
 
-Static#multiping-summary {
-    padding: 1;
-    border: round $accent;
-    margin-top: 1;
+#ping-summary, #mtr-summary, #multiping-summary {
+    padding: 0;
+    margin: 0 2;
 }
