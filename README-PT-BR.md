@@ -119,7 +119,7 @@ Found existing alias for "uv run". You should use: "uvr"
 Inicie a interface Textual para acessar múltiplos diagnósticos no mesmo lugar:
 
 ```bash
-uv run examples/tui.py
+uv run icmpx
 ```
 
 Use `q` (ou os controles do terminal) para encerrar quando quiser. Todas as visões dependem de sockets ICMP *raw*, então garanta o `CAP_NET_RAW` antes de abrir a TUI.
@@ -151,7 +151,7 @@ Dicas:
 
 - `examples/ping.py` — caminho mais curto para enviar múltiplos echos ICMP
 - `examples/traceroute.py` — descoberta hop a hop usando a API da biblioteca
-- `examples/tui.py` — TUI em Textual com visões de Ping, MultiPing, Traceroute e MTR
+- `icmpx/demo.py` — TUI em Textual com visões de Ping, MultiPing, Traceroute e MTR (execute com `uv run icmpx`)
 - `examples/mtr.py` — tabela dinâmica com Rich que imita o fluxo do `mtr`
 
 Copie esses scripts como ponto de partida ou integre o `Client` diretamente em serviços existentes.

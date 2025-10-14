@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 from textual import on, work
@@ -25,6 +26,8 @@ from icmpx import Client, EchoResult, RawSocketPermissionError, TracerouteResult
 
 
 ICMP_ECHO_REPLY = 0
+
+__all__ = ["IcmpxApp", "run"]
 
 
 def _format_ms(value: float | None) -> str:
@@ -842,7 +845,7 @@ class MtrView(Vertical):
 class IcmpxApp(App):
     """Main Textual application hosting the icmpx tools."""
 
-    CSS_PATH = "style.tcss"
+    CSS_PATH = Path(__file__).with_name("style.tcss")
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -872,6 +875,12 @@ class IcmpxApp(App):
         self.query_one(ContentSwitcher).current = view_id
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Launch the icmpx Textual UI."""
+
     app = IcmpxApp()
     app.run()
+
+
+if __name__ == "__main__":
+    run()

@@ -52,7 +52,7 @@ PingView, MultiPingView, TracerouteView, MTRView {
     width: 1fr;
 }
 
-#ping-table, #mtr-table, #multiping-tablem, #traceroute-table {
+#ping-table, #mtr-table, #multiping-table, #traceroute-table {
     height: 1fr;
     margin: 1 2;
     padding: 0;

@@ -119,7 +119,7 @@ Found existing alias for "uv run". You should use: "uvr"
 Launch the Textual interface to explore multiple diagnostics side by side:
 
 ```bash
-uv run examples/tui.py
+uv run icmpx
 ```
 
 Use `q` (or the terminal window controls) to exit at any time. All views depend on ICMP raw sockets, so make sure `CAP_NET_RAW` is granted before launching the app.
@@ -151,7 +151,7 @@ Tips:
 
 - `examples/ping.py` — shortest path to send repeated ICMP echo requests
 - `examples/traceroute.py` — hop-by-hop discovery using the library API
-- `examples/tui.py` — Textual UI bundling Ping, MultiPing, Traceroute, and MTR views
+- `icmpx/demo.py` — Textual UI bundling Ping, MultiPing, Traceroute, and MTR views (run it via `uv run icmpx`)
 - `examples/mtr.py` — Rich-powered live table that mimics the `mtr` workflow
 
 Feel free to copy these scripts as starting points for your own automation or integrate the `Client` directly inside existing services.
