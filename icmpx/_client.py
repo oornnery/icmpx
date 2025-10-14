@@ -96,8 +96,8 @@ class Client:
             return sock
         except PermissionError as exc:
             msg = (
-                "Raw socket requer privilégios elevados. Use sudo ou conceda "
-                "CAP_NET_RAW ao interpretador Python."
+                "Raw socket requires elevated privileges. Use sudo or grant "
+                "CAP_NET_RAW to the Python interpreter."
             )
             raise RawSocketPermissionError(msg) from exc
 

@@ -12,10 +12,16 @@ Uma biblioteca Python para criar diagnósticos ICMP com sockets *raw*. A API atu
 
 ## Pré-requisitos
 
-- Python 3.14 ou superior (veja `pyproject.toml`)
+- Python 3.11–3.14 (prefira 3.14 quando disponível; veja `pyproject.toml`)
 - Ambiente Linux com permissão para abrir sockets ICMP *raw*
 
-Conceda a permissão ao interpretador uma única vez:
+Conceda a permissão ao interpretador uma única vez (o utilitário funciona tanto com `uvx` quanto dentro do venv):
+
+```bash
+uvx icmpx --bootstrap-cap
+```
+
+Se preferir aplicar manualmente:
 
 ```bash
 sudo setcap cap_net_raw+ep "$(realpath $(which python))"
@@ -28,10 +34,11 @@ Clone o repositório e configure o ambiente com `uv`:
 ```bash
 git clone https://github.com/oornnery/icmpx.git
 cd icmpx
-uv venv
+uv python install 3.14  # opcional; pule se o uv não conseguir baixar
+uv venv --python 3.14   # remova --python para deixar o uv escolher outro 3.11+
 uv sync
 uv pip install .
-sudo setcap cap_net_raw+ep "$(realpath $(which python))"
+uv run icmpx --bootstrap-cap
 ```
 
 Depois de conceder `CAP_NET_RAW`, execute qualquer script de exemplo:

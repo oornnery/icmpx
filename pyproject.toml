@@ -1,9 +1,9 @@
 [project]
 name = "icmpx"
-version = "0.1.3"
+version = "0.1.4"
 description = "A simple ICMP library for Python"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "rich>=14.2.0",
     "textual>=6.2.1",
@@ -16,6 +16,9 @@ license = {text = "MIT"}
 keywords = ["icmp", "ping", "traceroute", "networking", "asyncio", "textual", "rich"]
 classifiers = [
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Topic :: System :: Networking",
@@ -32,6 +35,7 @@ dev = [
     "ruff>=0.14.0",
     "taskipy>=1.14.1",
     "ty>=0.0.1a22",
+    "icmpx",
 ]
 
 [project.urls]
@@ -47,7 +51,7 @@ build-backend = "setuptools.build_meta"
 icmpx = ["style.tcss"]
 
 [project.scripts]
-icmpx = "icmpx.demo:run"
+icmpx = "icmpx.__main__:main"
 
 [[tool.uv.index]]
 name = "pypi"
@@ -58,3 +62,6 @@ publish-url = "https://upload.pypi.org/legacy/"
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
+
+[tool.uv.sources]
+icmpx = { workspace = true }
