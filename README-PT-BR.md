@@ -114,11 +114,44 @@ Found existing alias for "uv run". You should use: "uvr"
 └─────────┴─────────────────────────────┴──────────────────────────────────────────────────────────────┴──────────┴──────────┴──────────────┴────────────┴───────────┴──────────┴──────────┘
 ```
 
+### TUI interativa
+
+Inicie a interface Textual para acessar múltiplos diagnósticos no mesmo lugar:
+
+```bash
+uv run examples/tui.py
+```
+
+Use `q` (ou os controles do terminal) para encerrar quando quiser. Todas as visões dependem de sockets ICMP *raw*, então garanta o `CAP_NET_RAW` antes de abrir a TUI.
+
+A interface oferece visões específicas para:
+
+- `Ping`: execução contínua com botão `Stop`, resumo ao vivo de RTT/perda e configuração de TTL/timeout.
+- `MultiPing`: lotes de destinos com estatísticas agregadas sempre visíveis abaixo da tabela de respostas.
+- `Traceroute`: descoberta de hops com *reverse DNS* opcional e RTT detalhado por *probe* após a execução.
+- `MTR`: ciclos sucessivos que atualizam as métricas de cada hop até ser interrompido, similar ao `mtr` tradicional.
+
+Dicas:
+
+- Navegue entre as visões pelos botões da barra lateral sem reiniciar a sessão.
+- Mensagens de validação e erros de permissão aparecem como notificações na parte inferior da tela.
+- Ajuste o timeout para valores maiores se notar perda acentuada de pacotes durante os testes.
+
+#### Pré-visualização da TUI
+
+![Visão de Ping](docs/ping_tui.png)
+
+![Visão de MultiPing](docs/multiping_tui.png)
+
+![Visão de Traceroute](docs/traceroute_tui.png)
+
+![Visão de MTR](docs/mtr_tui.png)
+
 ## Scripts de exemplo
 
 - `examples/ping.py` — caminho mais curto para enviar múltiplos echos ICMP
 - `examples/traceroute.py` — descoberta hop a hop usando a API da biblioteca
-- `examples/tui.py` — TUI experimental em Textual (depende de módulos em desenvolvimento)
+- `examples/tui.py` — TUI em Textual com visões de Ping, MultiPing, Traceroute e MTR
 - `examples/mtr.py` — tabela dinâmica com Rich que imita o fluxo do `mtr`
 
 Copie esses scripts como ponto de partida ou integre o `Client` diretamente em serviços existentes.

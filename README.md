@@ -114,11 +114,44 @@ Found existing alias for "uv run". You should use: "uvr"
 └─────────┴─────────────────────────────┴──────────────────────────────────────────────────────────────┴──────────┴──────────┴──────────────┴────────────┴───────────┴──────────┴──────────┘
 ```
 
+### Interactive TUI
+
+Launch the Textual interface to explore multiple diagnostics side by side:
+
+```bash
+uv run examples/tui.py
+```
+
+Use `q` (or the terminal window controls) to exit at any time. All views depend on ICMP raw sockets, so make sure `CAP_NET_RAW` is granted before launching the app.
+
+The UI exposes dedicated views for:
+
+- `Ping`: continuous probes with a `Stop` button, a live RTT/loss summary strip, and configurable TTL/timeout.
+- `MultiPing`: batched targets with per-host aggregates that remain visible beneath the log of individual replies.
+- `Traceroute`: hop discovery with optional reverse DNS lookup and per-probe RTT details once the run completes.
+- `MTR`: rolling cycles that refresh hop statistics until stopped, mirroring the behaviour of classic `mtr`.
+
+Tips:
+
+- Switch between views through the left-hand navigation buttons without restarting an active session.
+- Validation messages and permission errors surface as notifications at the bottom of the screen.
+- When experimenting with rapid probes, increase the timeout if your network drops packets aggressively.
+
+#### TUI preview
+
+![Ping view](docs/ping_tui.png)
+
+![MultiPing view](docs/multiping_tui.png)
+
+![Traceroute view](docs/traceroute_tui.png)
+
+![MTR view](docs/mtr_tui.png)
+
 ## Example Scripts
 
 - `examples/ping.py` — shortest path to send repeated ICMP echo requests
 - `examples/traceroute.py` — hop-by-hop discovery using the library API
-- `examples/tui.py` — experimental Textual UI (depends on in-progress modules)
+- `examples/tui.py` — Textual UI bundling Ping, MultiPing, Traceroute, and MTR views
 - `examples/mtr.py` — Rich-powered live table that mimics the `mtr` workflow
 
 Feel free to copy these scripts as starting points for your own automation or integrate the `Client` directly inside existing services.
