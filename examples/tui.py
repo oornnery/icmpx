@@ -221,9 +221,7 @@ class PingView(Vertical):
             max_rtt = f"{max(rtts):.2f} ms"
         else:
             min_rtt = avg_rtt = max_rtt = "n/a"
-        return (
-            f"sent={sent} recv={recv} loss={loss:.1f}% min={min_rtt} avg={avg_rtt} max={max_rtt}"
-        )
+        return f"sent={sent} recv={recv} loss={loss:.1f}% min={min_rtt} avg={avg_rtt} max={max_rtt}"
 
     def _update_summary(self) -> None:
         if self._summary_widget is None:
@@ -259,12 +257,18 @@ class MultiPingView(Vertical):
                 with Vertical():
                     yield Label("Interval (s)")
                     yield Input(
-                        placeholder="1.0", id="multiping-interval", value="1.0", compact=True
+                        placeholder="1.0",
+                        id="multiping-interval",
+                        value="1.0",
+                        compact=True,
                     )
                 with Vertical():
                     yield Label("Timeout")
                     yield Input(
-                        placeholder="1.0", id="multiping-timeout", value="1.0", compact=True
+                        placeholder="1.0",
+                        id="multiping-timeout",
+                        value="1.0",
+                        compact=True,
                     )
                 with Vertical():
                     yield Label("TTL")
@@ -294,7 +298,9 @@ class MultiPingView(Vertical):
             return
 
         targets_raw = self.query_one("#multiping-targets", Input).value or ""
-        targets = [part.strip() for part in re.split(r"[\s,]+", targets_raw) if part.strip()]
+        targets = [
+            part.strip() for part in re.split(r"[\s,]+", targets_raw) if part.strip()
+        ]
         if not targets:
             self.notify("Please provide at least one target.")
             return
@@ -345,7 +351,9 @@ class MultiPingView(Vertical):
                         result = client.probe(target, ttl=ttl, timeout=timeout)
                         app.call_from_thread(self._record_result, target, result)
 
-                        is_last = target_index == len(targets) - 1 and attempt == count - 1
+                        is_last = (
+                            target_index == len(targets) - 1 and attempt == count - 1
+                        )
                         if interval > 0 and not is_last:
                             time.sleep(interval)
         except RawSocketPermissionError as exc:
@@ -415,11 +423,7 @@ class MultiPingView(Vertical):
         for target, result in new[start:]:
             reply_packet = result.reply.received_packet
             reply_ip = reply_packet.ip_header.src_addr if reply_packet else "-"
-            sequence = (
-                str(reply_packet.icmp_packet.sequence)
-                if reply_packet
-                else "-"
-            )
+            sequence = str(reply_packet.icmp_packet.sequence) if reply_packet else "-"
             rtt_display = _format_ms(result.reply.rtt if reply_packet else None)
             status = "reply" if reply_packet else (result.error or "timeout")
             table.add_row(target, reply_ip, sequence, rtt_display, status)
@@ -440,13 +444,22 @@ class TracerouteView(Vertical):
             with Horizontal(id="traceroute-options"):
                 with Vertical():
                     yield Label("Max hops")
-                    yield Input(placeholder="30", id="traceroute-hops", value="30", compact=True)
+                    yield Input(
+                        placeholder="30", id="traceroute-hops", value="30", compact=True
+                    )
                 with Vertical():
                     yield Label("Probes")
-                    yield Input(placeholder="3", id="traceroute-probes", value="3", compact=True)
+                    yield Input(
+                        placeholder="3", id="traceroute-probes", value="3", compact=True
+                    )
                 with Vertical():
                     yield Label("Timeout")
-                    yield Input(placeholder="1.0", id="traceroute-timeout", value="1.0", compact=True)
+                    yield Input(
+                        placeholder="1.0",
+                        id="traceroute-timeout",
+                        value="1.0",
+                        compact=True,
+                    )
             yield Button("Run", id="traceroute-run", flat=True)
 
         table = DataTable(id="traceroute-table")
@@ -568,10 +581,14 @@ class MtrView(Vertical):
             with Horizontal(id="mtr-options"):
                 with Vertical():
                     yield Label("Max hops")
-                    yield Input(placeholder="30", id="mtr-hops", value="30", compact=True)
+                    yield Input(
+                        placeholder="30", id="mtr-hops", value="30", compact=True
+                    )
                 with Vertical():
                     yield Label("Timeout")
-                    yield Input(placeholder="1.0", id="mtr-timeout", value="1.0", compact=True)
+                    yield Input(
+                        placeholder="1.0", id="mtr-timeout", value="1.0", compact=True
+                    )
             with Horizontal(id="mtr-actions"):
                 yield Button("Run", id="mtr-run", flat=True)
                 yield Button("Stop", id="mtr-stop", flat=True, disabled=True)
@@ -662,7 +679,9 @@ class MtrView(Vertical):
 
         try:
             with Client(timeout=timeout, resolve_dns_default=True) as client:
-                resolved = target if client.valid_ip(target) else client.resolve_host(target)
+                resolved = (
+                    target if client.valid_ip(target) else client.resolve_host(target)
+                )
                 app.call_from_thread(self._set_resolved_target, resolved)
 
                 dns_cache: dict[str, Optional[str]] = {}
@@ -687,14 +706,22 @@ class MtrView(Vertical):
                                 dns_cache[addr] = client.reverse_dns(addr)
                             host = dns_cache.get(addr)
 
-                            rtt = result.reply.rtt if math.isfinite(result.reply.rtt) else None
+                            rtt = (
+                                result.reply.rtt
+                                if math.isfinite(result.reply.rtt)
+                                else None
+                            )
                             if result.error is None and addr == resolved:
                                 destination_reached = True
                         elif result.error not in (None, "timeout"):
-                            app.call_from_thread(self._handle_worker_error, RuntimeError(result.error))
+                            app.call_from_thread(
+                                self._handle_worker_error, RuntimeError(result.error)
+                            )
                             destination_reached = True
 
-                        app.call_from_thread(self._register_sample, ttl, addr, host, rtt)
+                        app.call_from_thread(
+                            self._register_sample, ttl, addr, host, rtt
+                        )
 
                         if destination_reached:
                             active_hops = min(active_hops, ttl)
@@ -825,8 +852,12 @@ class IcmpxApp(App):
         with Horizontal(id="main-container"):
             with Vertical(id="nav-container"):
                 yield Button("Ping", id="ping", classes="nav-button", flat=True)
-                yield Button("MultiPing", id="multiping", classes="nav-button", flat=True)
-                yield Button("Traceroute", id="traceroute", classes="nav-button", flat=True)
+                yield Button(
+                    "MultiPing", id="multiping", classes="nav-button", flat=True
+                )
+                yield Button(
+                    "Traceroute", id="traceroute", classes="nav-button", flat=True
+                )
                 yield Button("MTR", id="mtr", classes="nav-button", flat=True)
             with ContentSwitcher(initial="ping", id="content-container"):
                 yield PingView(id="ping")
