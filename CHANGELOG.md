@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 - Standardized the raw socket permission error message to English to match the CLI guidance.
 - Extended official support to Python 3.11–3.14 while preferring Python 3.14 when present.
 - Updated packaging metadata to use an SPDX license expression and satisfy modern setuptools warnings.
+- The bootstrap flow now re-verifies `CAP_NET_RAW`, auto-launches the demo on success, and regular runs preflight permission checks.
+- CLI feedback now uses Rich panels and colors to highlight errors, warnings, and next steps.
 
 ## [0.1.3] - 2025-10-14
 

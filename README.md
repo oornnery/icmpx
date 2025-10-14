@@ -15,7 +15,7 @@ A Python library for building ICMP diagnostics with raw sockets. The current API
 - Python 3.11–3.14 (prefers 3.14 when available; see `pyproject.toml`)
 - A Linux environment with permission to open ICMP raw sockets
 
-Grant the capability once for your Python interpreter (the helper works with `uvx` or inside a venv):
+Grant the capability once for your Python interpreter (the helper works with `uvx` or inside a venv and launches the demo after verifying success):
 
 ```bash
 uvx icmpx --bootstrap-cap
@@ -38,7 +38,7 @@ uv python install 3.14  # optional; skip if uv cannot fetch it yet
 uv venv --python 3.14   # drop --python to let uv pick another 3.11+ runtime
 uv sync
 uv pip install .
-uv run icmpx --bootstrap-cap
+uv run icmpx --bootstrap-cap  # applies CAP_NET_RAW and starts the demo once verified
 ```
 
 After granting `CAP_NET_RAW`, run any of the examples:
