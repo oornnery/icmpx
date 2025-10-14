@@ -85,7 +85,13 @@ def main(argv: list[str] | None = None) -> int:
     exe = os.path.realpath(sys.executable)
 
     if args.bootstrap_cap:
-        console.print(Panel.fit(f"Applying CAP_NET_RAW to [bold]{exe}[/]", title="Bootstrap", border_style="cyan"))
+        console.print(
+            Panel.fit(
+                f"Applying CAP_NET_RAW to [bold]{exe}[/]",
+                title="Bootstrap",
+                border_style="cyan",
+            )
+        )
         result = grant_capability(exe)
         if result != 0:
             return result
