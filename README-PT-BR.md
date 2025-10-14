@@ -122,6 +122,12 @@ Inicie a interface Textual para acessar múltiplos diagnósticos no mesmo lugar:
 uv run icmpx
 ```
 
+Ou execute sem clonar o repositório usando `uvx`:
+
+```bash
+uvx icmpx
+```
+
 Use `q` (ou os controles do terminal) para encerrar quando quiser. Todas as visões dependem de sockets ICMP *raw*, então garanta o `CAP_NET_RAW` antes de abrir a TUI.
 
 A interface oferece visões específicas para:
@@ -151,7 +157,7 @@ Dicas:
 
 - `examples/ping.py` — caminho mais curto para enviar múltiplos echos ICMP
 - `examples/traceroute.py` — descoberta hop a hop usando a API da biblioteca
-- `icmpx/demo.py` — TUI em Textual com visões de Ping, MultiPing, Traceroute e MTR (execute com `uv run icmpx`)
+- `icmpx/demo.py` — TUI em Textual com visões de Ping, MultiPing, Traceroute e MTR (execute com `uv run icmpx` ou `uvx icmpx`)
 - `examples/mtr.py` — tabela dinâmica com Rich que imita o fluxo do `mtr`
 
 Copie esses scripts como ponto de partida ou integre o `Client` diretamente em serviços existentes.
