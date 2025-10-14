@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 authors = [
-    {name = "Oornnery", email = "oornnery@example.com"}
+    {name = "oornnery"}
 ]
 license = {text = "MIT"}
 keywords = ["icmp", "ping", "traceroute", "networking", "asyncio", "textual", "rich"]
