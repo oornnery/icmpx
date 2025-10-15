@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 - Updated packaging metadata to use an SPDX license expression and satisfy modern setuptools warnings.
 - The bootstrap flow now re-verifies `CAP_NET_RAW`, auto-launches the demo on success, and regular runs preflight permission checks.
 - CLI feedback now uses Rich panels and colors to highlight errors, warnings, and next steps.
+- Introduced `AsyncClient`, an asyncio-native API that mirrors `Client` for non-blocking probes, ping loops, and traceroutes.
+- Textual demo now runs entirely on `AsyncClient`, launching concurrent probes in Ping, MultiPing, and MTR to keep the UI responsive and measurements fast.
 
 ## [0.1.3] - 2025-10-14
 

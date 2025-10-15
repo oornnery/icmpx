@@ -1,4 +1,4 @@
-from ._client import Client
+from ._client import AsyncClient, Client
 from ._models import (
     EchoReply,
     EchoRequest,
@@ -15,6 +15,7 @@ from ._exceptions import RawSocketPermissionError
 
 __all__ = [
     "Client",
+    "AsyncClient",
     "EchoReply",
     "EchoRequest",
     "EchoResult",

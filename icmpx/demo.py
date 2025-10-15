@@ -1,12 +1,15 @@
-"""Interactive Textual TUI for icmpx using the Client API."""
+"""Interactive Textual TUI for icmpx using the AsyncClient API."""
 
 from __future__ import annotations
 
+import asyncio
 import math
 import re
-import time
+import secrets
+from collections import Counter
 from pathlib import Path
 from typing import Any, Optional
+from threading import get_ident
 
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -22,7 +25,7 @@ from textual.widgets import (
     Static,
 )
 
-from icmpx import Client, EchoResult, RawSocketPermissionError, TracerouteResult
+from icmpx import AsyncClient, EchoResult, RawSocketPermissionError, TracerouteResult
 
 
 ICMP_ECHO_REPLY = 0
@@ -42,9 +45,14 @@ def _reset_table(table: DataTable, columns: tuple[str, ...]) -> None:
         table.add_columns(*columns)
 
 
+def _new_identifier() -> int:
+    return secrets.randbelow(0x10000)
+
+
 class PingView(Vertical):
     """Simple ping form and result table."""
 
+    FOCUS = "#ping-target"
     title = "Ping"
     results = reactive(tuple())
     running = reactive(False)
@@ -66,6 +74,14 @@ class PingView(Vertical):
                 with Vertical():
                     yield Label("Timeout")
                     yield Input(placeholder="1.0", id="ping-timeout", compact=True)
+                with Vertical():
+                    yield Label("Interval (s)")
+                    yield Input(
+                        placeholder="0.2",
+                        id="ping-interval",
+                        value="0.2",
+                        compact=True,
+                    )
             with Horizontal(id="ping-actions"):
                 yield Button("Run", id="ping-submit", flat=True)
                 yield Button("Stop", id="ping-stop", flat=True, disabled=True)
@@ -86,6 +102,7 @@ class PingView(Vertical):
         target = self.query_one("#ping-target", Input).value
         ttl_value = self.query_one("#ping-ttl", Input).value or "64"
         timeout_value = self.query_one("#ping-timeout", Input).value or "1.0"
+        interval_value = self.query_one("#ping-interval", Input).value or "0.2"
 
         if not target:
             self.notify("Please enter a target address.")
@@ -94,6 +111,7 @@ class PingView(Vertical):
         try:
             ttl = max(1, int(ttl_value))
             timeout = max(0.1, float(timeout_value))
+            interval = max(0.0, float(interval_value))
         except ValueError:
             self.notify("Invalid numeric value.")
             return
@@ -109,7 +127,7 @@ class PingView(Vertical):
         run_button.disabled = True
         stop_button.disabled = False
 
-        self.perform_ping(target, ttl=ttl, timeout=timeout)
+        self.perform_ping(target, ttl=ttl, timeout=timeout, interval=interval)
 
     @on(Button.Pressed, "#ping-stop")
     def stop_ping(self) -> None:  # noqa: D401
@@ -119,32 +137,32 @@ class PingView(Vertical):
             return
         self._should_stop = True
 
-    @work(thread=True)
-    def perform_ping(
+    @work(exclusive=True)
+    async def perform_ping(
         self,
         target: str,
         ttl: int = 64,
         timeout: float = 1.0,
+        interval: float = 0.2,
     ) -> None:
-        app = self.app
-        if app is None:
-            return
-
         try:
-            with Client(timeout=timeout, default_ttl=ttl) as client:
+            async with AsyncClient(
+                timeout=timeout,
+                default_ttl=ttl,
+                identifier=_new_identifier(),
+            ) as client:
                 while not self._should_stop:
-                    result = client.probe(target, ttl=ttl, timeout=timeout)
-                    app.call_from_thread(self._append_result, result)
+                    result = await client.probe(target, ttl=ttl, timeout=timeout)
+                    self._append_result(result)
                     if self._should_stop:
                         break
-                    time.sleep(1.0)
+                    await asyncio.sleep(interval)
         except RawSocketPermissionError as exc:
-            app.call_from_thread(self._show_error, str(exc))
+            self._show_error(str(exc))
         except Exception as exc:  # pragma: no cover - defensive
-            app.call_from_thread(self._show_error, str(exc))
+            self._show_error(str(exc))
         finally:
-            if app is not None:
-                app.call_from_thread(self._finish_worker)
+            self._finish_worker()
 
     def _append_result(self, result: EchoResult) -> None:
         self._stats["sent"] += 1
@@ -242,6 +260,7 @@ class MultiPingView(Vertical):
     def __init__(self, *children: Any, **kwargs: Any) -> None:
         super().__init__(*children, **kwargs)
         self._stats: dict[str, dict[str, Any]] = {}
+        self._should_stop = False
 
     def compose(self) -> ComposeResult:
         with Vertical(id="multiping-form"):
@@ -253,16 +272,11 @@ class MultiPingView(Vertical):
             )
             with Horizontal(id="multiping-options"):
                 with Vertical():
-                    yield Label("Count")
-                    yield Input(
-                        placeholder="4", id="multiping-count", value="4", compact=True
-                    )
-                with Vertical():
                     yield Label("Interval (s)")
                     yield Input(
-                        placeholder="1.0",
+                        placeholder="0.2",
                         id="multiping-interval",
-                        value="1.0",
+                        value="0.2",
                         compact=True,
                     )
                 with Vertical():
@@ -278,7 +292,9 @@ class MultiPingView(Vertical):
                     yield Input(
                         placeholder="64", id="multiping-ttl", value="64", compact=True
                     )
-            yield Button("Run", id="multiping-run", flat=True)
+            with Horizontal(id="multiping-actions"):
+                yield Button("Run", id="multiping-run", flat=True)
+                yield Button("Stop", id="multiping-stop", flat=True, disabled=True)
         with Vertical(id="multiping-results"):
             table = DataTable(id="multiping-table")
             table.add_columns(
@@ -308,13 +324,11 @@ class MultiPingView(Vertical):
             self.notify("Please provide at least one target.")
             return
 
-        count_value = self.query_one("#multiping-count", Input).value or "4"
-        interval_value = self.query_one("#multiping-interval", Input).value or "1.0"
+        interval_value = self.query_one("#multiping-interval", Input).value or "0.2"
         timeout_value = self.query_one("#multiping-timeout", Input).value or "1.0"
         ttl_value = self.query_one("#multiping-ttl", Input).value or "64"
 
         try:
-            count = max(1, int(count_value))
             interval = max(0.0, float(interval_value))
             timeout = max(0.1, float(timeout_value))
             ttl = max(1, int(ttl_value))
@@ -323,6 +337,7 @@ class MultiPingView(Vertical):
             return
 
         self.running = True
+        self._should_stop = False
         self.results = tuple()
         self._stats = {}
         self._summary.update("")
@@ -331,40 +346,92 @@ class MultiPingView(Vertical):
             table,
             ("Target", "Reply IP", "Sequence", "RTT (ms)", "Status"),
         )
+        run_button = self.query_one("#multiping-run", Button)
+        stop_button = self.query_one("#multiping-stop", Button)
+        run_button.disabled = True
+        stop_button.disabled = False
 
-        self.perform_multiping(targets, count, interval, timeout, ttl)
+        self.perform_multiping(targets, interval, timeout, ttl)
 
-    @work(thread=True)
-    def perform_multiping(
+    @work(exclusive=True)
+    async def perform_multiping(
         self,
         targets: list[str],
-        count: int,
         interval: float,
         timeout: float,
         ttl: int,
     ) -> None:
         app = self.app
-        if app is None:
-            return
 
+        def dispatch(callback, *args: Any) -> None:
+            if app is not None and getattr(app, "_thread_id", None) != get_ident():
+                app.call_from_thread(callback, *args)
+            else:
+                callback(*args)
+
+        clients: dict[str, AsyncClient] = {}
         try:
-            with Client(timeout=timeout, default_ttl=ttl) as client:
-                for target_index, target in enumerate(targets):
-                    for attempt in range(count):
-                        result = client.probe(target, ttl=ttl, timeout=timeout)
-                        app.call_from_thread(self._record_result, target, result)
+            # Keep a dedicated AsyncClient per target so ICMP sequence numbers increment.
+            for target in targets:
+                try:
+                    client = AsyncClient(
+                        timeout=timeout,
+                        default_ttl=ttl,
+                        identifier=_new_identifier(),
+                    )
+                    await client.__aenter__()
+                except RawSocketPermissionError as exc:
+                    dispatch(self._handle_worker_error, exc)
+                    self._should_stop = True
+                    return
+                except Exception as exc:  # pragma: no cover - defensive
+                    dispatch(self._handle_worker_error, exc)
+                    self._should_stop = True
+                    return
+                clients[target] = client
 
-                        is_last = (
-                            target_index == len(targets) - 1 and attempt == count - 1
-                        )
-                        if interval > 0 and not is_last:
-                            time.sleep(interval)
-        except RawSocketPermissionError as exc:
-            app.call_from_thread(self._handle_worker_error, exc)
-        except Exception as exc:  # pragma: no cover - defensive
-            app.call_from_thread(self._handle_worker_error, exc)
+            while not self._should_stop:
+                probes = await asyncio.gather(
+                    *[
+                        self._probe_once(clients[target], target, ttl, timeout)
+                        for target in targets
+                    ],
+                    return_exceptions=True,
+                )
+
+                for target, outcome in zip(targets, probes):
+                    if isinstance(outcome, RawSocketPermissionError):
+                        dispatch(self._handle_worker_error, outcome)
+                        self._should_stop = True
+                        continue
+                    if isinstance(outcome, Exception):
+                        dispatch(self._handle_worker_error, outcome)
+                        continue
+
+                    dispatch(self._record_result, target, outcome)
+
+                if self._should_stop:
+                    break
+                if interval > 0:
+                    await asyncio.sleep(interval)
         finally:
-            app.call_from_thread(self._finish_worker)
+            await asyncio.gather(
+                *[
+                    client.__aexit__(None, None, None)
+                    for client in clients.values()
+                ],
+                return_exceptions=True,
+            )
+            dispatch(self._finish_worker)
+
+    async def _probe_once(
+        self,
+        client: AsyncClient,
+        target: str,
+        ttl: int,
+        timeout: float,
+    ) -> EchoResult:
+        return await client.probe(target, ttl=ttl, timeout=timeout)
 
     def _record_result(self, target: str, result: EchoResult) -> None:
         self.results = (*self.results, (target, result))
@@ -406,6 +473,19 @@ class MultiPingView(Vertical):
 
     def _finish_worker(self) -> None:
         self.running = False
+        self._should_stop = False
+        run_button = self.query_one("#multiping-run", Button)
+        stop_button = self.query_one("#multiping-stop", Button)
+        run_button.disabled = False
+        stop_button.disabled = True
+
+    @on(Button.Pressed, "#multiping-stop")
+    def stop_multiping(self) -> None:  # noqa: D401
+        if not self.running:
+            if self.app is not None:
+                self.app.bell()
+            return
+        self._should_stop = True
 
     def watch_results(self, old: tuple, new: tuple) -> None:  # noqa: D401
         table = self.query_one("#multiping-table", DataTable)
@@ -493,21 +573,21 @@ class TracerouteView(Vertical):
         _reset_table(table, ("Hop", "Address", "Hostname", "RTTs", "Notes"))
         self.perform_traceroute(target, max_hops, probes, timeout)
 
-    @work(thread=True)
-    def perform_traceroute(
+    @work(exclusive=True)
+    async def perform_traceroute(
         self,
         target: str,
         max_hops: int,
         probes: int,
         timeout: float,
     ) -> None:
-        app = self.app
-        if app is None:
-            return
-
         try:
-            with Client(timeout=timeout, resolve_dns_default=True) as client:
-                result = client.traceroute(
+            async with AsyncClient(
+                timeout=timeout,
+                resolve_dns_default=True,
+                identifier=_new_identifier(),
+            ) as client:
+                result = await client.traceroute(
                     target,
                     max_hops=max_hops,
                     probes=probes,
@@ -515,13 +595,13 @@ class TracerouteView(Vertical):
                     resolve_dns=True,
                 )
         except RawSocketPermissionError as exc:
-            app.call_from_thread(self._handle_worker_error, exc)
+            self._handle_worker_error(exc)
         except Exception as exc:  # pragma: no cover - defensive
-            app.call_from_thread(self._handle_worker_error, exc)
+            self._handle_worker_error(exc)
         else:
-            app.call_from_thread(self.update_result, result)
+            self.update_result(result)
         finally:
-            app.call_from_thread(self._finish_worker)
+            self._finish_worker()
 
     def _handle_worker_error(self, error: Exception) -> None:
         if self.app is not None:
@@ -538,19 +618,26 @@ class TracerouteView(Vertical):
             return
 
         for hop in result.hops:
-            address_value = hop.addr or "?"
-            hostname_value = hop.hostname or "?"
-
             rtt_parts: list[str] = []
             notes: set[str] = set()
+            addresses: list[str] = []
             for probe in hop.probes:
                 if probe.received_packet is None:
                     rtt_parts.append("timeout")
                 else:
+                    reply_packet = probe.received_packet
                     rtt_parts.append(_format_ms(probe.rtt))
-                    pkt = probe.received_packet.icmp_packet
+                    addresses.append(reply_packet.ip_header.src_addr)
+                    pkt = reply_packet.icmp_packet
                     if pkt.type != ICMP_ECHO_REPLY:
                         notes.add(f"type={pkt.type} code={pkt.code}")
+
+            address_value = "?"
+            if addresses:
+                unique_addresses = list(dict.fromkeys(addresses))
+                address_value = ", ".join(unique_addresses)
+
+            hostname_value = hop.hostname or "?"
 
             table.add_row(
                 str(hop.ttl),
@@ -576,6 +663,8 @@ class MtrView(Vertical):
         self._stats: dict[int, dict[str, Any]] = {}
         self._resolved_target: Optional[str] = None
         self._cycles = 0
+        self._hop_ttls: list[int] = []
+        self._route_info: dict[int, dict[str, Optional[str]]] = {}
 
     def compose(self) -> ComposeResult:
         with Vertical(id="mtr-form"):
@@ -591,6 +680,14 @@ class MtrView(Vertical):
                     yield Label("Timeout")
                     yield Input(
                         placeholder="1.0", id="mtr-timeout", value="1.0", compact=True
+                    )
+                with Vertical():
+                    yield Label("Interval (s)")
+                    yield Input(
+                        placeholder="0.2",
+                        id="mtr-interval",
+                        value="0.2",
+                        compact=True,
                     )
             with Horizontal(id="mtr-actions"):
                 yield Button("Run", id="mtr-run", flat=True)
@@ -619,6 +716,8 @@ class MtrView(Vertical):
         self._resolved_target = None
         self._cycles = 0
         self._info.update("Cycles: 0")
+        self._hop_ttls = []
+        self._route_info = {}
 
     @on(Button.Pressed, "#mtr-run")
     def run_mtr(self) -> None:  # noqa: D401
@@ -629,10 +728,12 @@ class MtrView(Vertical):
         target = self.query_one("#mtr-target", Input).value or "8.8.8.8"
         hops_value = self.query_one("#mtr-hops", Input).value or "30"
         timeout_value = self.query_one("#mtr-timeout", Input).value or "1.0"
+        interval_value = self.query_one("#mtr-interval", Input).value or "0.2"
 
         try:
             max_hops = max(1, int(hops_value))
             timeout = max(0.1, float(timeout_value))
+            interval = max(0.0, float(interval_value))
         except ValueError:
             self.notify("Invalid numeric value.")
             return
@@ -659,7 +760,7 @@ class MtrView(Vertical):
         run_button.disabled = True
         stop_button.disabled = False
 
-        self.perform_mtr(target, max_hops, timeout)
+        self.perform_mtr(target, max_hops, timeout, interval)
 
     @on(Button.Pressed, "#mtr-stop")
     def stop_mtr(self) -> None:  # noqa: D401
@@ -669,80 +770,308 @@ class MtrView(Vertical):
             return
         self._should_stop = True
 
-    @work(thread=True)
-    def perform_mtr(
+    @work(exclusive=True)
+    async def perform_mtr(
         self,
         target: str,
         max_hops: int,
         timeout: float,
+        interval: float,
     ) -> None:
         app = self.app
-        if app is None:
-            return
 
+        def dispatch(callback, *args: Any) -> None:
+            if app is not None and getattr(app, "_thread_id", None) != get_ident():
+                app.call_from_thread(callback, *args)
+            else:
+                callback(*args)
+
+        dns_cache: dict[str, Optional[str]] = {}
+        ttl_clients: dict[int, AsyncClient] = {}
+        hop_clients: dict[int, AsyncClient] = {}
         try:
-            with Client(timeout=timeout, resolve_dns_default=True) as client:
-                resolved = (
-                    target if client.valid_ip(target) else client.resolve_host(target)
-                )
-                app.call_from_thread(self._set_resolved_target, resolved)
+            try:
+                route = await self._discover_route(target, max_hops, timeout)
+            except Exception as exc:  # pragma: no cover - defensive
+                dispatch(self._handle_worker_error, exc)
+                return
 
-                dns_cache: dict[str, Optional[str]] = {}
-                active_hops = max_hops
+            resolved = route.resolved or target
+            dispatch(self._set_resolved_target, resolved)
+            self._initialize_route(route)
+            for hop in route.hops:
+                if hop.addr:
+                    dns_cache.setdefault(hop.addr, hop.hostname)
 
-                while not self._should_stop:
-                    destination_reached = False
-                    for ttl in range(1, active_hops + 1):
-                        if self._should_stop:
-                            break
+            for ttl in self._hop_ttls:
+                info = self._route_info.get(ttl, {})
+                addr = info.get("addr")
+                if not addr:
+                    continue
+                try:
+                    client = AsyncClient(
+                        timeout=timeout,
+                        resolve_dns_default=False,
+                        identifier=_new_identifier(),
+                    )
+                    await client.__aenter__()
+                except RawSocketPermissionError as exc:
+                    dispatch(self._handle_worker_error, exc)
+                    self._should_stop = True
+                    return
+                hop_clients[ttl] = client
 
-                        result = client.probe(resolved, ttl=ttl, timeout=timeout)
-                        reply_packet = result.reply.received_packet
+            while not self._should_stop:
+                order = list(self._hop_ttls) if self._hop_ttls else list(range(1, max_hops + 1))
+                if not order:
+                    break
 
-                        addr: Optional[str] = None
-                        host: Optional[str] = None
-                        rtt: Optional[float] = None
-
-                        if reply_packet is not None:
-                            addr = reply_packet.ip_header.src_addr
-                            if addr not in dns_cache:
-                                dns_cache[addr] = client.reverse_dns(addr)
-                            host = dns_cache.get(addr)
-
-                            rtt = (
-                                result.reply.rtt
-                                if math.isfinite(result.reply.rtt)
-                                else None
+                tasks = []
+                for ttl in order:
+                    info = self._route_info.get(ttl, {})
+                    addr = info.get("addr")
+                    if addr and ttl in hop_clients:
+                        tasks.append(
+                            self._ping_hop_once(
+                                hop_clients[ttl],
+                                ttl,
+                                addr,
+                                timeout,
+                                dns_cache,
                             )
-                            if result.error is None and addr == resolved:
-                                destination_reached = True
-                        elif result.error not in (None, "timeout"):
-                            app.call_from_thread(
-                                self._handle_worker_error, RuntimeError(result.error)
+                        )
+                    else:
+                        tasks.append(
+                            self._probe_ttl_once(
+                                ttl_clients,
+                                resolved,
+                                ttl,
+                                timeout,
+                                dns_cache,
                             )
-                            destination_reached = True
-
-                        app.call_from_thread(
-                            self._register_sample, ttl, addr, host, rtt
                         )
 
-                        if destination_reached:
-                            active_hops = min(active_hops, ttl)
-                            break
+                probes = await asyncio.gather(*tasks, return_exceptions=True)
 
-                        time.sleep(0.1)
-
-                    app.call_from_thread(self._increment_cycle)
-                    if self._should_stop:
+                reached_ttl: Optional[int] = None
+                for ttl_value, outcome in zip(order, probes):
+                    if isinstance(outcome, RawSocketPermissionError):
+                        dispatch(self._handle_worker_error, outcome)
+                        self._should_stop = True
                         break
-                    time.sleep(1.0)
+                    if isinstance(outcome, Exception):
+                        dispatch(self._handle_worker_error, outcome)
+                        continue
 
-        except RawSocketPermissionError as exc:
-            app.call_from_thread(self._handle_worker_error, exc)
-        except Exception as exc:  # pragma: no cover - defensive
-            app.call_from_thread(self._handle_worker_error, exc)
+                    if ttl_value not in self._hop_ttls:
+                        self._hop_ttls.append(ttl_value)
+                        self._hop_ttls.sort()
+
+                    ttl_value, result, addr, host = outcome
+                    if addr:
+                        info = self._route_info.setdefault(ttl_value, {})
+                        if info.get("addr") is None:
+                            info["addr"] = addr
+                        if host and info.get("hostname") is None:
+                            info["hostname"] = host
+                        dns_cache.setdefault(addr, host)
+                        if ttl_value not in hop_clients:
+                            try:
+                                client = AsyncClient(
+                                    timeout=timeout,
+                                    resolve_dns_default=False,
+                                    identifier=_new_identifier(),
+                                )
+                                await client.__aenter__()
+                            except RawSocketPermissionError as exc:
+                                dispatch(self._handle_worker_error, exc)
+                                self._should_stop = True
+                                break
+                            hop_clients[ttl_value] = client
+
+                    rtt_ms = result.reply.rtt
+                    rtt_value = (
+                        rtt_ms if rtt_ms is not None and math.isfinite(rtt_ms) else None
+                    )
+
+                    error = result.error
+                    expected_error = False
+                    if isinstance(error, str):
+                        if error.startswith("time_exceeded"):
+                            expected_error = True
+                        elif error.startswith("dest_unreachable") or error.startswith(
+                            "destination_unreachable"
+                        ):
+                            expected_error = True
+
+                    if error not in (None, "timeout") and not expected_error:
+                        dispatch(self._handle_worker_error, RuntimeError(error))
+                        continue
+
+                    dispatch(self._register_sample, ttl_value, addr, host, rtt_value)
+
+                    if addr == resolved and error is None:
+                        reached_ttl = (
+                            ttl_value
+                            if reached_ttl is None
+                            else min(reached_ttl, ttl_value)
+                        )
+
+                if self._should_stop:
+                    break
+
+                if reached_ttl is not None:
+                    limit = reached_ttl
+                    stale_ttls = [ttl for ttl in list(ttl_clients) if ttl > limit]
+                    if stale_ttls:
+                        stale_clients = [ttl_clients.pop(ttl) for ttl in stale_ttls]
+                        await asyncio.gather(
+                            *[
+                                client.__aexit__(None, None, None)
+                                for client in stale_clients
+                            ],
+                            return_exceptions=True,
+                        )
+                    stale_direct = [ttl for ttl in list(hop_clients) if ttl > limit]
+                    if stale_direct:
+                        direct_clients = [hop_clients.pop(ttl) for ttl in stale_direct]
+                        await asyncio.gather(
+                            *[
+                                client.__aexit__(None, None, None)
+                                for client in direct_clients
+                            ],
+                            return_exceptions=True,
+                        )
+                    self._hop_ttls = [ttl for ttl in self._hop_ttls if ttl <= limit]
+                    dispatch(self._truncate_hops, limit)
+
+                dispatch(self._increment_cycle)
+                if self._should_stop:
+                    break
+                if interval > 0:
+                    await asyncio.sleep(interval)
         finally:
-            app.call_from_thread(self._finish_worker)
+            if hop_clients:
+                await asyncio.gather(
+                    *[
+                        client.__aexit__(None, None, None)
+                        for client in list(hop_clients.values())
+                    ],
+                    return_exceptions=True,
+                )
+            if ttl_clients:
+                await asyncio.gather(
+                    *[
+                        client.__aexit__(None, None, None)
+                        for client in list(ttl_clients.values())
+                    ],
+                    return_exceptions=True,
+                )
+            dispatch(self._finish_worker)
+
+    async def _discover_route(
+        self,
+        target: str,
+        max_hops: int,
+        timeout: float,
+    ) -> TracerouteResult:
+        async with AsyncClient(
+            timeout=timeout,
+            resolve_dns_default=True,
+            identifier=_new_identifier(),
+        ) as client:
+            return await client.traceroute(
+                target,
+                max_hops=max_hops,
+                probes=1,
+                timeout=timeout,
+                resolve_dns=True,
+            )
+
+    def _initialize_route(self, route: TracerouteResult) -> None:
+        self._hop_ttls = []
+        for hop in route.hops:
+            ttl = hop.ttl
+            self._hop_ttls.append(ttl)
+            info = self._route_info.setdefault(ttl, {})
+            if hop.addr:
+                info.setdefault("addr", hop.addr)
+            if hop.hostname:
+                info.setdefault("hostname", hop.hostname)
+            entry = self._stats.setdefault(
+                ttl,
+                {
+                    "addr": None,
+                    "hostname": None,
+                    "addr_counts": Counter(),
+                    "hostname_counts": Counter(),
+                    "sent": 0,
+                    "recv": 0,
+                    "rtts": [],
+                    "last": None,
+                },
+            )
+            if hop.addr:
+                entry["addr"] = hop.addr
+            if hop.hostname:
+                entry["hostname"] = hop.hostname
+        self._hop_ttls.sort()
+
+    async def _ping_hop_once(
+        self,
+        client: AsyncClient,
+        ttl: int,
+        address: str,
+        timeout: float,
+        dns_cache: dict[str, Optional[str]],
+    ) -> tuple[int, EchoResult, Optional[str], Optional[str]]:
+        result = await client.probe(
+            address,
+            timeout=timeout,
+            resolve_dns=False,
+        )
+        host = dns_cache.get(address)
+        if host is None and result.reply.received_packet is not None:
+            host = await client.reverse_dns(address)
+            dns_cache[address] = host
+        return ttl, result, address, host
+
+    async def _probe_ttl_once(
+        self,
+        clients: dict[int, AsyncClient],
+        resolved: str,
+        ttl: int,
+        timeout: float,
+        dns_cache: dict[str, Optional[str]],
+    ) -> tuple[int, EchoResult, Optional[str], Optional[str]]:
+        client = clients.get(ttl)
+        if client is None:
+            client = AsyncClient(
+                timeout=timeout,
+                default_ttl=ttl,
+                resolve_dns_default=False,
+                identifier=_new_identifier(),
+            )
+            await client.__aenter__()
+            clients[ttl] = client
+
+        result = await client.probe(
+            resolved,
+            ttl=ttl,
+            timeout=timeout,
+            resolve_dns=False,
+        )
+        reply_packet = result.reply.received_packet
+        addr: Optional[str] = None
+        host: Optional[str] = None
+        if reply_packet is not None:
+            addr = reply_packet.ip_header.src_addr
+            if addr in dns_cache:
+                host = dns_cache[addr]
+            else:
+                host = await client.reverse_dns(addr)
+                dns_cache[addr] = host
+        return ttl, result, addr, host
 
     def _register_sample(
         self,
@@ -756,6 +1085,8 @@ class MtrView(Vertical):
             {
                 "addr": None,
                 "hostname": None,
+                "addr_counts": Counter(),
+                "hostname_counts": Counter(),
                 "sent": 0,
                 "recv": 0,
                 "rtts": [],
@@ -764,9 +1095,22 @@ class MtrView(Vertical):
         )
 
         entry["sent"] += 1
-        if address and entry["addr"] is None:
+        addr_counts: Counter[str] = entry["addr_counts"]
+        host_counts: Counter[str] = entry["hostname_counts"]
+
+        if address:
+            addr_counts[address] += 1
+        if hostname:
+            host_counts[hostname] += 1
+
+        if addr_counts:
+            entry["addr"] = addr_counts.most_common(1)[0][0]
+        elif address:
             entry["addr"] = address
-        if hostname and entry["hostname"] is None:
+
+        if host_counts:
+            entry["hostname"] = host_counts.most_common(1)[0][0]
+        elif hostname:
             entry["hostname"] = hostname
 
         entry["last"] = rtt
@@ -803,10 +1147,24 @@ class MtrView(Vertical):
             avg_rtt = (sum(rtts) / len(rtts)) if rtts else None
             max_rtt = max(rtts) if rtts else None
 
+            addr_counts = data.get("addr_counts")
+            if isinstance(addr_counts, Counter) and addr_counts:
+                addr_list = [addr for addr, _ in addr_counts.most_common()]
+                addr_display = ", ".join(addr_list)
+            else:
+                addr_display = data.get("addr") or "?"
+
+            host_counts = data.get("hostname_counts")
+            if isinstance(host_counts, Counter) and host_counts:
+                host_list = [host for host, _ in host_counts.most_common() if host]
+                hostname_display = ", ".join(host_list)
+            else:
+                hostname_display = data.get("hostname") or ""
+
             table.add_row(
                 str(ttl),
-                data.get("addr") or "?",
-                data.get("hostname") or "",
+                addr_display,
+                hostname_display,
                 f"{loss_percent:.1f}",
                 str(sent),
                 str(recv),
@@ -826,6 +1184,17 @@ class MtrView(Vertical):
     def _set_resolved_target(self, resolved: str) -> None:
         self._resolved_target = resolved
         self._info.update(f"Cycles: {self._cycles} ({resolved})")
+
+    def _truncate_hops(self, limit: int) -> None:
+        removed = [ttl for ttl in self._stats if ttl > limit]
+        if not removed:
+            return
+        for ttl in removed:
+            del self._stats[ttl]
+            self._route_info.pop(ttl, None)
+        if self._hop_ttls:
+            self._hop_ttls = [ttl for ttl in self._hop_ttls if ttl <= limit]
+        self._refresh_table()
 
     def _handle_worker_error(self, error: Exception) -> None:
         if self.app is not None:

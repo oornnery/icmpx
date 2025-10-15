@@ -5,6 +5,7 @@ A Python library for building ICMP diagnostics with raw sockets. The current API
 ## Features
 
 - Context-managed `Client` that takes care of raw socket setup and teardown
+- `AsyncClient` mirrors `Client` with asyncio socket APIs for non-blocking workflows
 - `probe()` for single TTL measurements, `ping()` for repeated samples, and `traceroute()` for hop discovery
 - Rich dataclasses (`EchoResult`, `TracerouteResult`, `ReceivedPacket`, and friends) for post-processing and formatting
 - Optional reverse DNS lookup per request
@@ -73,6 +74,28 @@ with Client(timeout=1.5) as client:
 ```
 
 Each `EchoResult` carries the original request, an `EchoReply` with the measured RTT, and any ICMP errors returned during the exchange.
+
+### Async probe
+
+```python
+import asyncio
+from icmpx import AsyncClient
+
+
+async def main() -> None:
+    async with AsyncClient(timeout=1.5) as client:
+        result = await client.probe("8.8.8.8")
+        if result.error:
+            print(f"{result.request.addr}: {result.error}")
+        else:
+            rtt = result.reply.rtt
+            print(f"reply in {rtt:.2f} ms")
+
+
+asyncio.run(main())
+```
+
+`AsyncClient` shares the same dataclasses and semantics as `Client`, but it relies on `asyncio` primitives (`sock_sendto`, `sock_recv`) so you can schedule probes alongside other asynchronous work.
 
 ### Traceroute workflow
 
@@ -167,7 +190,7 @@ Tips:
 - `icmpx/demo.py` — Textual UI bundling Ping, MultiPing, Traceroute, and MTR views (run it via `uv run icmpx` or `uvx icmpx`)
 - `examples/mtr.py` — Rich-powered live table that mimics the `mtr` workflow
 
-Feel free to copy these scripts as starting points for your own automation or integrate the `Client` directly inside existing services.
+Feel free to copy these scripts as starting points for your own automation or integrate the `Client`/`AsyncClient` directly inside existing services.
 
 ## Error Handling
 
@@ -177,7 +200,7 @@ If the interpreter cannot create a raw socket, `Client` raises `RawSocketPermiss
 
 - IPv6 probes and traceroutes
 - Aggregated multiping support across multiple targets
-- asyncio-compatible client implementation
+- Async utilities for batching or concurrency limits
 - Additional examples and narrative documentation
 
 Contributions and discussion are welcome — open an issue with your use case or ideas.

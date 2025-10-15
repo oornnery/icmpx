@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import select
@@ -7,6 +8,7 @@ import socket
 import struct
 import time
 from contextlib import contextmanager
+from typing import Optional
 
 from ._models import (
     EchoReply,
@@ -45,13 +47,17 @@ class Client:
         timeout: float = 1.0,
         default_ttl: int = 64,
         resolve_dns_default: bool = False,
+        identifier: int | None = None,
     ) -> None:
         self.bind_addr = bind_addr
         self.timeout = timeout
         self.default_ttl = default_ttl
         self.resolve_dns_default = resolve_dns_default
         self._sock: socket.socket | None = None
-        self._identifier = os.getpid() & 0xFFFF
+        if identifier is not None:
+            self._identifier = identifier & 0xFFFF
+        else:
+            self._identifier = os.getpid() & 0xFFFF
         self._next_sequence = 0
 
     def __enter__(self) -> Client:
@@ -459,5 +465,268 @@ class Client:
 
 
 class AsyncClient(Client):
-    # Placeholder para futura implementação assíncrona
-    pass
+    """Cliente ICMP assíncrono usando sockets non-blocking e asyncio."""
+
+    def _create_socket(self) -> socket.socket:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+            if self.bind_addr:
+                sock.bind((self.bind_addr, 0))
+            sock.setblocking(False)
+            return sock
+        except PermissionError as exc:
+            msg = (
+                "Raw socket requires elevated privileges. Use sudo or grant "
+                "CAP_NET_RAW to the Python interpreter."
+            )
+            raise RawSocketPermissionError(msg) from exc
+
+    async def __aenter__(self) -> AsyncClient:
+        if self._sock is None:
+            self._sock = self._create_socket()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if self._sock:
+            self._sock.close()
+            self._sock = None
+
+    def _ensure_socket(self) -> bool:
+        if self._sock is None:
+            self._sock = self._create_socket()
+            return True
+        return False
+
+    def _close_socket(self) -> None:
+        if self._sock:
+            self._sock.close()
+            self._sock = None
+
+    # ------- DNS/IP (assíncrono) -------
+
+    async def resolve_host(self, host: str) -> str:
+        if self.valid_ip(host):
+            return host
+        loop = asyncio.get_running_loop()
+        try:
+            infos = await loop.getaddrinfo(
+                host,
+                None,
+                family=socket.AF_INET,
+                type=0,
+                proto=0,
+            )
+        except socket.gaierror as exc:
+            raise RuntimeError(f"Não foi possível resolver host: {host}") from exc
+        return infos[0][4][0]
+
+    async def reverse_dns(self, addr: str) -> Optional[str]:
+        def _reverse(target: str) -> Optional[str]:
+            try:
+                return socket.gethostbyaddr(target)[0]
+            except socket.herror:
+                return None
+
+        return await asyncio.to_thread(_reverse, addr)
+
+    # ------- Envio/Recepção (assíncronos) -------
+
+    async def _send(self, addr: str, ttl: int, payload: bytes | None) -> SentPacket:
+        if self._sock is None:
+            raise RuntimeError("Socket não inicializado. Abra o contexto assíncrono primeiro.")
+        loop = asyncio.get_running_loop()
+        self._next_sequence = (self._next_sequence + 1) & 0xFFFF
+        raw_bytes, icmp = self._build_echo_request(self._next_sequence, payload)
+        self._sock.setsockopt(socket.IPPROTO_IP, socket.IP_TTL, ttl)
+        ts = time.monotonic()
+        await loop.sock_sendto(self._sock, raw_bytes, (addr, 0))
+        return SentPacket(packet=icmp, raw=raw_bytes, timestamp=ts, addr=addr, ttl=ttl)
+
+    async def _receive(self, ident: int, seq: int, timeout: float) -> ReceivedPacket | None:
+        if self._sock is None:
+            raise RuntimeError("Socket não inicializado. Abra o contexto assíncrono primeiro.")
+        loop = asyncio.get_running_loop()
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            try:
+                raw = await asyncio.wait_for(
+                    loop.sock_recv(self._sock, 65535), timeout=remaining
+                )
+            except asyncio.TimeoutError:
+                return None
+            recv_at = time.monotonic()
+            try:
+                pkt = self._parse_ip_icmp(raw, recv_at)
+            except ValueError as exc:
+                logger.debug(f"Descartando pacote inválido: {exc}")
+                continue
+            if self._match_probe(ident, seq, pkt.icmp_packet):
+                return pkt
+
+    # ------- Alto nível: probe/ping/traceroute (assíncronos) -------
+
+    async def probe(
+        self,
+        target: str,
+        ttl: int | None = None,
+        timeout: float | None = None,
+        payload_size: int = 0,
+        resolve_dns: bool | None = None,
+    ) -> EchoResult:
+        addr = target if self.valid_ip(target) else await self.resolve_host(target)
+        do_dns = self.resolve_dns_default if resolve_dns is None else resolve_dns
+        ttl_val = ttl or self.default_ttl
+        timeout_val = timeout if timeout is not None else self.timeout
+        payload = b"\x00" * max(0, payload_size)
+
+        created = self._ensure_socket()
+        try:
+            sent = await self._send(addr, ttl_val, payload)
+            rcv = await self._receive(self._identifier, sent.packet.sequence, timeout_val)
+        finally:
+            if created:
+                self._close_socket()
+
+        hostname = await self.reverse_dns(addr) if do_dns else None
+        request = EchoRequest(addr=addr, hostname=hostname, ttl=ttl_val, sent_packet=sent)
+
+        if rcv is None:
+            return EchoResult(
+                request=request,
+                reply=EchoReply(rtt=float("inf"), received_packet=None),
+                error="timeout",
+            )
+
+        rtt_ms = (rcv.received_at - sent.timestamp) * 1000.0
+        t = rcv.icmp_packet.type
+        c = rcv.icmp_packet.code
+        if t == ICMP_ECHO_REPLY:
+            err = None
+        elif t == ICMP_TIME_EXCEEDED:
+            err = f"time_exceeded(code={c})"
+        elif t == ICMP_DEST_UNREACHABLE:
+            err = f"dest_unreachable(code={c})"
+        elif t == ICMP_PARAMETER_PROBLEM:
+            err = f"parameter_problem(code={c})"
+        elif t == ICMP_REDIRECT:
+            err = f"redirect(code={c})"
+        else:
+            err = f"icmp_type_{t}_code_{c}"
+
+        return EchoResult(request=request, reply=EchoReply(rtt=rtt_ms, received_packet=rcv), error=err)
+
+    async def ping(
+        self,
+        target: str,
+        count: int = 4,
+        interval: float = 1.0,
+        timeout: float | None = None,
+        size: int = 0,
+        resolve_dns: bool | None = None,
+    ) -> list[EchoResult]:
+        addr = target if self.valid_ip(target) else await self.resolve_host(target)
+        do_dns = self.resolve_dns_default if resolve_dns is None else resolve_dns
+        timeout_val = timeout if timeout is not None else self.timeout
+        results: list[EchoResult] = []
+
+        created = self._ensure_socket()
+        try:
+            for i in range(count):
+                start = time.monotonic()
+                sent = await self._send(addr, self.default_ttl, b"\x00" * max(0, size))
+                rcv = await self._receive(self._identifier, sent.packet.sequence, timeout_val)
+                hostname = await self.reverse_dns(addr) if do_dns else None
+                request = EchoRequest(addr=addr, hostname=hostname, ttl=self.default_ttl, sent_packet=sent)
+
+                if rcv is None:
+                    results.append(
+                        EchoResult(
+                            request=request,
+                            reply=EchoReply(rtt=float("inf"), received_packet=None),
+                            error="timeout",
+                        )
+                    )
+                else:
+                    rtt_ms = (rcv.received_at - sent.timestamp) * 1000.0
+                    t = rcv.icmp_packet.type
+                    c = rcv.icmp_packet.code
+                    if t == ICMP_ECHO_REPLY:
+                        err = None
+                    elif t == ICMP_TIME_EXCEEDED:
+                        err = f"time_exceeded(code={c})"
+                    elif t == ICMP_DEST_UNREACHABLE:
+                        err = f"dest_unreachable(code={c})"
+                    else:
+                        err = f"icmp_type_{t}_code_{c}"
+                    results.append(
+                        EchoResult(
+                            request=request,
+                            reply=EchoReply(rtt=rtt_ms, received_packet=rcv),
+                            error=err,
+                        )
+                    )
+
+                elapsed = time.monotonic() - start
+                sleep_left = interval - elapsed
+                if sleep_left > 0 and i != count - 1:
+                    await asyncio.sleep(sleep_left)
+        finally:
+            if created:
+                self._close_socket()
+
+        return results
+
+    async def traceroute(
+        self,
+        target: str,
+        max_hops: int = 30,
+        probes: int = 3,
+        timeout: float | None = None,
+        resolve_dns: bool | None = None,
+        size: int = 0,
+    ) -> TracerouteResult:
+        resolved = target if self.valid_ip(target) else await self.resolve_host(target)
+        do_dns = self.resolve_dns_default if resolve_dns is None else resolve_dns
+        timeout_val = timeout if timeout is not None else self.timeout
+
+        hops: list[TracerouteEntry] = []
+        reached = False
+
+        created = self._ensure_socket()
+        try:
+            for ttl in range(1, max_hops + 1):
+                per_hop_replies: list[EchoReply] = []
+                hop_addr: str | None = None
+                hop_host: str | None = None
+
+                for _ in range(probes):
+                    sent = await self._send(resolved, ttl, b"\x00" * max(0, size))
+                    rcv = await self._receive(self._identifier, sent.packet.sequence, timeout_val)
+
+                    if rcv is None:
+                        per_hop_replies.append(EchoReply(rtt=float("inf"), received_packet=None))
+                        continue
+
+                    rtt_ms = (rcv.received_at - sent.timestamp) * 1000.0
+                    per_hop_replies.append(EchoReply(rtt=rtt_ms, received_packet=rcv))
+
+                    if hop_addr is None:
+                        hop_addr = rcv.ip_header.src_addr
+                        hop_host = await self.reverse_dns(hop_addr) if do_dns else None
+
+                    if rcv.icmp_packet.type == ICMP_ECHO_REPLY and rcv.ip_header.src_addr == resolved:
+                        reached = True
+
+                hops.append(
+                    TracerouteEntry(ttl=ttl, probes=per_hop_replies, addr=hop_addr, hostname=hop_host)
+                )
+                if reached:
+                    break
+        finally:
+            if created:
+                self._close_socket()
+
+        return TracerouteResult(target=target, resolved=resolved, hops=hops)

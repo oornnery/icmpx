@@ -5,6 +5,7 @@ Uma biblioteca Python para criar diagnósticos ICMP com sockets *raw*. A API atu
 ## Recursos
 
 - `Client` com *context manager* para abrir e fechar o socket ICMP com segurança
+- `AsyncClient` espelha a API do `Client` usando `asyncio` para fluxos não bloqueantes
 - `probe()` para medir um hop específico, `ping()` para séries de amostras e `traceroute()` para descobrir rotas
 - Dataclasses ricas (`EchoResult`, `TracerouteResult`, `ReceivedPacket` e outras) prontas para pós-processamento
 - *Reverse DNS* opcional por requisição
@@ -73,6 +74,28 @@ with Client(timeout=1.5) as client:
 ```
 
 Cada `EchoResult` carrega a requisição original, um `EchoReply` com o RTT medido e eventuais erros ICMP recebidos.
+
+### Probe assíncrono
+
+```python
+import asyncio
+from icmpx import AsyncClient
+
+
+async def main() -> None:
+    async with AsyncClient(timeout=1.5) as client:
+        resultado = await client.probe("8.8.8.8")
+        if resultado.error:
+            print(f"{resultado.request.addr}: {resultado.error}")
+        else:
+            rtt = resultado.reply.rtt
+            print(f"resposta em {rtt:.2f} ms")
+
+
+asyncio.run(main())
+```
+
+`AsyncClient` reutiliza as mesmas dataclasses e semântica do `Client`, mas usa as primitivas de `asyncio` (`sock_sendto`, `sock_recv`) para que você possa disparar probes junto com outras tarefas assíncronas.
 
 ### Fluxo de traceroute
 
@@ -167,7 +190,7 @@ Dicas:
 - `icmpx/demo.py` — TUI em Textual com visões de Ping, MultiPing, Traceroute e MTR (execute com `uv run icmpx` ou `uvx icmpx`)
 - `examples/mtr.py` — tabela dinâmica com Rich que imita o fluxo do `mtr`
 
-Copie esses scripts como ponto de partida ou integre o `Client` diretamente em serviços existentes.
+Copie esses scripts como ponto de partida ou integre o `Client`/`AsyncClient` diretamente em serviços existentes.
 
 ## Tratamento de erros
 
@@ -177,7 +200,7 @@ Se o interpretador não conseguir criar o socket *raw*, o `Client` lança `RawSo
 
 - Suporte a IPv6
 - Multiping com agregação para múltiplos destinos
-- Cliente compatível com `asyncio`
+- Utilitários assíncronos para lotes ou limitação de concorrência
 - Novos exemplos e documentação narrativa
 
 Contribuições são bem-vindas — abra uma issue com sua necessidade ou ideia.
