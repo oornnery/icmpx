@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2025-10-15
+
+### What's New
+
+- Randomize the ICMP identifier with a UUID so concurrent client instances no longer collide on PID-derived IDs.
+- Add interval controls across the ping, multi-ping, and mtr demos, defaulting to 200 ms for faster feedback while still honoring longer pauses.
+- Rework multi-ping into a continuous monitor with start/stop controls that keep stats and tables responsive without manual reruns.
+- Tighten Textual styling so action buttons share sizing and form inputs gain consistent padding.
+
 ## [0.1.4] - 2025-10-14
 
 ### Highlights

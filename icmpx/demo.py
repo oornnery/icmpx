@@ -61,6 +61,14 @@ class PingView(Vertical):
             yield Input(placeholder="8.8.8.8", id="ping-target", value="8.8.8.8")
             with Horizontal(id="ping-options"):
                 with Vertical():
+                    yield Label("Interval (s)")
+                    yield Input(
+                        placeholder="1.0",
+                        id="ping-interval",
+                        value="0.2",
+                        compact=True,
+                    )
+                with Vertical():
                     yield Label("TTL")
                     yield Input(placeholder="64", id="ping-ttl", compact=True)
                 with Vertical():
@@ -83,6 +91,7 @@ class PingView(Vertical):
                 self.app.bell()
             return
 
+        interval = self.query_one("#ping-interval", Input).value or "1.0"
         target = self.query_one("#ping-target", Input).value
         ttl_value = self.query_one("#ping-ttl", Input).value or "64"
         timeout_value = self.query_one("#ping-timeout", Input).value or "1.0"
@@ -92,6 +101,7 @@ class PingView(Vertical):
             return
 
         try:
+            interval = max(0.0, float(interval))
             ttl = max(1, int(ttl_value))
             timeout = max(0.1, float(timeout_value))
         except ValueError:
@@ -109,7 +119,7 @@ class PingView(Vertical):
         run_button.disabled = True
         stop_button.disabled = False
 
-        self.perform_ping(target, ttl=ttl, timeout=timeout)
+        self.perform_ping(target, interval=interval, ttl=ttl, timeout=timeout)
 
     @on(Button.Pressed, "#ping-stop")
     def stop_ping(self) -> None:  # noqa: D401
@@ -123,8 +133,9 @@ class PingView(Vertical):
     def perform_ping(
         self,
         target: str,
-        ttl: int = 64,
+        interval: float = 0.2,
         timeout: float = 1.0,
+        ttl: int = 64,
     ) -> None:
         app = self.app
         if app is None:
@@ -137,7 +148,7 @@ class PingView(Vertical):
                     app.call_from_thread(self._append_result, result)
                     if self._should_stop:
                         break
-                    time.sleep(1.0)
+                    time.sleep(interval)
         except RawSocketPermissionError as exc:
             app.call_from_thread(self._show_error, str(exc))
         except Exception as exc:  # pragma: no cover - defensive
@@ -253,16 +264,11 @@ class MultiPingView(Vertical):
             )
             with Horizontal(id="multiping-options"):
                 with Vertical():
-                    yield Label("Count")
-                    yield Input(
-                        placeholder="4", id="multiping-count", value="4", compact=True
-                    )
-                with Vertical():
                     yield Label("Interval (s)")
                     yield Input(
                         placeholder="1.0",
                         id="multiping-interval",
-                        value="1.0",
+                        value="0.2",
                         compact=True,
                     )
                 with Vertical():
@@ -278,7 +284,9 @@ class MultiPingView(Vertical):
                     yield Input(
                         placeholder="64", id="multiping-ttl", value="64", compact=True
                     )
-            yield Button("Run", id="multiping-run", flat=True)
+            with Horizontal(id="multiping-actions"):
+                yield Button("Run", id="multiping-submit", flat=True)
+                yield Button("Stop", id="multiping-stop", flat=True, disabled=True)
         with Vertical(id="multiping-results"):
             table = DataTable(id="multiping-table")
             table.add_columns(
@@ -293,7 +301,7 @@ class MultiPingView(Vertical):
             self._summary = Static(id="multiping-summary")
             yield self._summary
 
-    @on(Button.Pressed, "#multiping-run")
+    @on(Button.Pressed, "#multiping-submit")
     def run_multiping(self) -> None:  # noqa: D401
         if self.running:
             if self.app is not None:
@@ -308,13 +316,11 @@ class MultiPingView(Vertical):
             self.notify("Please provide at least one target.")
             return
 
-        count_value = self.query_one("#multiping-count", Input).value or "4"
         interval_value = self.query_one("#multiping-interval", Input).value or "1.0"
         timeout_value = self.query_one("#multiping-timeout", Input).value or "1.0"
         ttl_value = self.query_one("#multiping-ttl", Input).value or "64"
 
         try:
-            count = max(1, int(count_value))
             interval = max(0.0, float(interval_value))
             timeout = max(0.1, float(timeout_value))
             ttl = max(1, int(ttl_value))
@@ -323,7 +329,13 @@ class MultiPingView(Vertical):
             return
 
         self.running = True
+        self._should_stop = False
         self.results = tuple()
+        run_button = self.query_one("#multiping-submit", Button)
+        stop_button = self.query_one("#multiping-stop", Button)
+        run_button.disabled = True
+        stop_button.disabled = False
+
         self._stats = {}
         self._summary.update("")
         table = self.query_one("#multiping-table", DataTable)
@@ -332,16 +344,24 @@ class MultiPingView(Vertical):
             ("Target", "Reply IP", "Sequence", "RTT (ms)", "Status"),
         )
 
-        self.perform_multiping(targets, count, interval, timeout, ttl)
+        self.perform_multiping(targets, interval, timeout, ttl)
+
+
+    @on(Button.Pressed, "#multiping-stop")
+    def stop_ping(self) -> None:  # noqa: D401
+        if not self.running:
+            if self.app is not None:
+                self.app.bell()
+            return
+        self._should_stop = True
 
     @work(thread=True)
     def perform_multiping(
         self,
         targets: list[str],
-        count: int,
-        interval: float,
-        timeout: float,
-        ttl: int,
+        interval: float = 0.2,
+        timeout: float = 1.0,
+        ttl: int = 64,
     ) -> None:
         app = self.app
         if app is None:
@@ -349,15 +369,13 @@ class MultiPingView(Vertical):
 
         try:
             with Client(timeout=timeout, default_ttl=ttl) as client:
-                for target_index, target in enumerate(targets):
-                    for attempt in range(count):
+                while not self._should_stop:
+                    for target_index, target in enumerate(targets):
                         result = client.probe(target, ttl=ttl, timeout=timeout)
                         app.call_from_thread(self._record_result, target, result)
-
-                        is_last = (
-                            target_index == len(targets) - 1 and attempt == count - 1
-                        )
-                        if interval > 0 and not is_last:
+                        if self._should_stop:
+                            break
+                        if interval > 0:
                             time.sleep(interval)
         except RawSocketPermissionError as exc:
             app.call_from_thread(self._handle_worker_error, exc)
@@ -406,6 +424,11 @@ class MultiPingView(Vertical):
 
     def _finish_worker(self) -> None:
         self.running = False
+        self._should_stop = False
+        run_button = self.query_one("#multiping-submit", Button)
+        stop_button = self.query_one("#multiping-stop", Button)
+        run_button.disabled = False
+        stop_button.disabled = True
 
     def watch_results(self, old: tuple, new: tuple) -> None:  # noqa: D401
         table = self.query_one("#multiping-table", DataTable)
@@ -463,13 +486,13 @@ class TracerouteView(Vertical):
                         value="1.0",
                         compact=True,
                     )
-            yield Button("Run", id="traceroute-run", flat=True)
+            yield Button("Run", id="traceroute-submit", flat=True)
 
         table = DataTable(id="traceroute-table")
         table.add_columns("Hop", "Address", "Hostname", "RTTs", "Notes")
         yield table
 
-    @on(Button.Pressed, "#traceroute-run")
+    @on(Button.Pressed, "#traceroute-submit")
     def run_traceroute(self) -> None:  # noqa: D401
         if self.running:
             self.app.bell()
@@ -583,6 +606,14 @@ class MtrView(Vertical):
             yield Input(placeholder="8.8.8.8", id="mtr-target", value="8.8.8.8")
             with Horizontal(id="mtr-options"):
                 with Vertical():
+                    yield Label("Interval (s)")
+                    yield Input(
+                        placeholder="1.0",
+                        id="mtr-interval",
+                        value="0.2",
+                        compact=True,
+                    )
+                with Vertical():
                     yield Label("Max hops")
                     yield Input(
                         placeholder="30", id="mtr-hops", value="30", compact=True
@@ -593,7 +624,7 @@ class MtrView(Vertical):
                         placeholder="1.0", id="mtr-timeout", value="1.0", compact=True
                     )
             with Horizontal(id="mtr-actions"):
-                yield Button("Run", id="mtr-run", flat=True)
+                yield Button("Run", id="mtr-submit", flat=True)
                 yield Button("Stop", id="mtr-stop", flat=True, disabled=True)
         with Vertical(id="mtr-results"):
             table = DataTable(id="mtr-table")
@@ -620,17 +651,19 @@ class MtrView(Vertical):
         self._cycles = 0
         self._info.update("Cycles: 0")
 
-    @on(Button.Pressed, "#mtr-run")
+    @on(Button.Pressed, "#mtr-submit")
     def run_mtr(self) -> None:  # noqa: D401
         if self.running:
             self.app.bell()
             return
 
+        interval_value = self.query_one("#mtr-interval", Input).value or "1.0"
         target = self.query_one("#mtr-target", Input).value or "8.8.8.8"
         hops_value = self.query_one("#mtr-hops", Input).value or "30"
         timeout_value = self.query_one("#mtr-timeout", Input).value or "1.0"
 
         try:
+            interval = max(0.0, float(interval_value))
             max_hops = max(1, int(hops_value))
             timeout = max(0.1, float(timeout_value))
         except ValueError:
@@ -654,12 +687,12 @@ class MtrView(Vertical):
                 "Max",
             ),
         )
-        run_button = self.query_one("#mtr-run", Button)
+        run_button = self.query_one("#mtr-submit", Button)
         stop_button = self.query_one("#mtr-stop", Button)
         run_button.disabled = True
         stop_button.disabled = False
 
-        self.perform_mtr(target, max_hops, timeout)
+        self.perform_mtr(target=target, max_hops=max_hops, timeout=timeout, interval=interval)
 
     @on(Button.Pressed, "#mtr-stop")
     def stop_mtr(self) -> None:  # noqa: D401
@@ -673,8 +706,9 @@ class MtrView(Vertical):
     def perform_mtr(
         self,
         target: str,
-        max_hops: int,
-        timeout: float,
+        max_hops: int = 30,
+        timeout: float = 1.0,
+        interval: float = 0.2,
     ) -> None:
         app = self.app
         if app is None:
@@ -730,12 +764,10 @@ class MtrView(Vertical):
                             active_hops = min(active_hops, ttl)
                             break
 
-                        time.sleep(0.1)
-
                     app.call_from_thread(self._increment_cycle)
                     if self._should_stop:
                         break
-                    time.sleep(1.0)
+                    time.sleep(interval)
 
         except RawSocketPermissionError as exc:
             app.call_from_thread(self._handle_worker_error, exc)
@@ -835,7 +867,7 @@ class MtrView(Vertical):
 
     def _finish_worker(self) -> None:
         self.running = False
-        run_button = self.query_one("#mtr-run", Button)
+        run_button = self.query_one("#mtr-submit", Button)
         stop_button = self.query_one("#mtr-stop", Button)
         run_button.disabled = False
         stop_button.disabled = True

@@ -34,11 +34,11 @@ App {
     }
 
     #ping-submit,
-    #multiping-run,
-    #traceroute-run,
-    #mtr-run {
-        margin-left: 1;
-        width: 20;
+    #multiping-submit,
+    #traceroute-submit,
+    #mtr-submit {
+        width: 10;
+        margin: 0 1;
     }
 }
 PingView, MultiPingView, TracerouteView, MTRView {
@@ -47,12 +47,12 @@ PingView, MultiPingView, TracerouteView, MTRView {
     width: 1fr;
 }
 
-#ping-results, #mtr-results, #multiping-results {
+#ping-results, #traceroute-results, #multiping-results, #mtr-results {
     height: 1fr;
     width: 1fr;
 }
 
-#ping-table, #mtr-table, #multiping-table, #traceroute-table {
+#ping-table, #traceroute-table, #multiping-table, #mtr-table {
     height: 1fr;
     margin: 1 2;
     padding: 0;
@@ -61,4 +61,8 @@ PingView, MultiPingView, TracerouteView, MTRView {
 #ping-summary, #mtr-summary, #multiping-summary {
     padding: 0;
     margin: 0 2;
+}
+
+Input {
+    padding: 0 1;
 }

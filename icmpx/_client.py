@@ -6,6 +6,7 @@ import select
 import socket
 import struct
 import time
+import uuid
 from contextlib import contextmanager
 
 from ._models import (
@@ -51,7 +52,7 @@ class Client:
         self.default_ttl = default_ttl
         self.resolve_dns_default = resolve_dns_default
         self._sock: socket.socket | None = None
-        self._identifier = os.getpid() & 0xFFFF
+        self._identifier = uuid.uuid4().int & 0xFFFF
         self._next_sequence = 0
 
     def __enter__(self) -> Client:
